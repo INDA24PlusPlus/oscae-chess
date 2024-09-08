@@ -8,13 +8,10 @@
 //  Legal moves are the moves that a piece is allowed to make
 //  Psuedo-legal moves are moves that a piece can make without checking if the king is placed in check.
 
-use std::vec;
+//use std::vec;
 
 // DATA
-
-
-
-struct Game {
+pub struct Game {
     live_pieces: Vec<Piece>,
     turn: Color,
     fifty_move_rule: u32, // half-moves, reset upon pawn move or capture
@@ -23,7 +20,7 @@ struct Game {
 }
 
 impl Game {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut live_pieces = Vec::new();
         // adding white pieces
         live_pieces.push(Piece { piece_type: PieceType::Rook, color: Color::White, x: 0, y: 0, has_moved: false, just_moved: false });
@@ -58,19 +55,25 @@ impl Game {
 
         Self {live_pieces, turn, fifty_move_rule, white_bitmap, black_bitmap}
     }
+
+    pub fn get_board_state(&self) -> Vec<Piece> {
+        self.live_pieces.clone()
+    }
     
 }
 
-struct Piece {
-    piece_type: PieceType,
-    color: Color,
-    x: u8, // A-H (represented in code as 0-7)
-    y: u8, // 1-8 (represented in code as 0-7)
-    has_moved: bool,
-    just_moved: bool,
+#[derive(Clone)]
+pub struct Piece {
+    pub piece_type: PieceType,
+    pub color: Color,
+    pub x: u8, // A-H (represented in code as 0-7)
+    pub y: u8, // 1-8 (represented in code as 0-7)
+    pub has_moved: bool,
+    pub just_moved: bool,
 }
 
-enum PieceType {
+#[derive(Clone, PartialEq)]
+pub enum PieceType {
     King,
     Queen,
     Bishop,
@@ -79,8 +82,8 @@ enum PieceType {
     Pawn,
 }
 
-#[derive(PartialEq)]
-enum Color {
+#[derive(Clone, PartialEq)]
+pub enum Color {
     White,
     Black,
 }
