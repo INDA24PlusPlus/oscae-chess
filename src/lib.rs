@@ -10,9 +10,11 @@
 
 //use std::vec;
 
+use std::collections::HashMap;
+
 // DATA
 pub struct Game {
-    live_pieces: Vec<Piece>,
+    live_pieces: HashMap<u8, Piece>,
     turn: Color,
     fifty_move_rule: u32, // half-moves, reset upon pawn move or capture
     white_bitmap: u64,
@@ -20,32 +22,35 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new() -> Self {
-        let mut live_pieces = Vec::new();
-        // adding white pieces
-        live_pieces.push(Piece { piece_type: PieceType::Rook, color: Color::White, x: 0, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Knight, color: Color::White, x: 1, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Bishop, color: Color::White, x: 2, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Queen, color: Color::White, x: 3, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::King, color: Color::White, x: 4, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Bishop, color: Color::White, x: 5, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Knight, color: Color::White, x: 6, y: 0, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Rook, color: Color::White, x: 7, y: 0, has_moved: false, just_moved: false });
-        for i in 0..8 {
-            live_pieces.push(Piece { piece_type: PieceType::Pawn, color: Color::White, x: i, y: 1, has_moved: false, just_moved: false });
-        }
+    pub fn new(&self) -> Self {
+        let mut live_pieces = HashMap::new();
 
-        // adding black pieces
-        live_pieces.push(Piece { piece_type: PieceType::Rook, color: Color::Black, x: 0, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Knight, color: Color::Black, x: 1, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Bishop, color: Color::Black, x: 2, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Queen, color: Color::Black, x: 3, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::King, color: Color::Black, x: 4, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Bishop, color: Color::Black, x: 5, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Knight, color: Color::Black, x: 6, y: 7, has_moved: false, just_moved: false });
-        live_pieces.push(Piece { piece_type: PieceType::Rook, color: Color::Black, x: 7, y: 7, has_moved: false, just_moved: false });
+        let white_template = Piece { piece_type: PieceType::Pawn, color: Color::White, x: 8, y: 0, has_moved: false, just_moved: false};
+        // adding white pieces
+        live_pieces.insert(0, Piece { piece_type: PieceType::Rook,   x: 0, ..white_template });
+        live_pieces.insert(1, Piece { piece_type: PieceType::Knight, x: 1, ..white_template });
+        live_pieces.insert(2, Piece { piece_type: PieceType::Bishop, x: 2, ..white_template });
+        live_pieces.insert(3, Piece { piece_type: PieceType::Queen,  x: 3, ..white_template });
+        live_pieces.insert(4, Piece { piece_type: PieceType::King,   x: 4, ..white_template });
+        live_pieces.insert(5, Piece { piece_type: PieceType::Bishop, x: 5, ..white_template });
+        live_pieces.insert(6, Piece { piece_type: PieceType::Knight, x: 6, ..white_template });
+        live_pieces.insert(7, Piece { piece_type: PieceType::Rook,   x: 7, ..white_template });
         for i in 0..8 {
-            live_pieces.push(Piece { piece_type: PieceType::Pawn, color: Color::Black, x: i, y: 6, has_moved: false, just_moved: false });
+            live_pieces.insert(8 + i, Piece { x: i, y: 1, ..white_template });
+        }
+        
+        let black_template = Piece { color: Color::Black, y: 7, ..white_template };
+        // adding black pieces
+        live_pieces.insert(56, Piece { piece_type: PieceType::Rook,   x: 0, ..black_template });
+        live_pieces.insert(57, Piece { piece_type: PieceType::Knight, x: 1, ..black_template });
+        live_pieces.insert(58, Piece { piece_type: PieceType::Bishop, x: 2, ..black_template });
+        live_pieces.insert(59, Piece { piece_type: PieceType::Queen,  x: 3, ..black_template });
+        live_pieces.insert(60, Piece { piece_type: PieceType::King,   x: 4, ..black_template });
+        live_pieces.insert(61, Piece { piece_type: PieceType::Bishop, x: 5, ..black_template });
+        live_pieces.insert(62, Piece { piece_type: PieceType::Knight, x: 6, ..black_template });
+        live_pieces.insert(63, Piece { piece_type: PieceType::Rook,   x: 7, ..black_template });
+        for i in 0..8 {
+            live_pieces.insert(48 + i, Piece { x: i, y: 6, ..black_template });
         }
         let turn = Color::White;
         let fifty_move_rule = 0;
@@ -56,8 +61,83 @@ impl Game {
         Self {live_pieces, turn, fifty_move_rule, white_bitmap, black_bitmap}
     }
 
-    pub fn get_board_state(&self) -> Vec<Piece> {
+    pub fn get_board_state(&self) -> HashMap<u8, Piece> {
         self.live_pieces.clone()
+    }
+
+    // moves the piece and takes whatever is in the way, does not do any checks
+    fn force_move(&mut self, piece: &mut Piece, x: u8, y: u8) -> Result<(), String> {
+        if x > 7 || y > 7 {
+            Err("Position out of bounds!".to_string())
+        } else {
+            let pos_bitmap = pos_to_bitmap(x, y);
+
+            if (self.black_bitmap | self.white_bitmap) & pos_bitmap != 0 { // if there is other piece in pos
+                self.live_pieces.remove(&pos_to_index(x, y));
+            }
+
+            if piece.color == Color::White {
+                
+                self.white_bitmap &= !pos_to_bitmap(piece.x, piece.y); // turn off bit we moved from
+                self.white_bitmap |= pos_bitmap; // turn on bit we moved to
+            } else {
+                self.black_bitmap &= !pos_to_bitmap(piece.x, piece.y); // turn off bit we moved from
+                self.black_bitmap |= pos_bitmap; // turn on bit we moved to
+            }
+            
+            piece.x = x;
+            piece.y = y;
+            piece.has_moved = true;
+            piece.just_moved = true;
+            Ok(())
+        }
+    }
+
+    fn psuedo_legal_moves(&self, piece : Piece) -> u64 {
+        match piece.piece_type {
+            PieceType::King => return self.psuedo_legal_moves_king(piece),
+            PieceType::Queen => return self.psuedo_legal_moves_queen(piece),
+            PieceType::Bishop => return self.psuedo_legal_moves_bishop(piece),
+            PieceType::Knight => return self.psuedo_legal_moves_knight(piece),
+            PieceType::Rook => return self.psuedo_legal_moves_rook(piece),
+            PieceType::Pawn => return self.psuedo_legal_moves_pawn(piece),
+        }
+    }
+    
+    fn psuedo_legal_moves_king(&self, piece : Piece) -> u64 {
+        let mut moves: u64 = pos_to_bitmap(piece.x, piece.y);
+        todo!();
+        moves
+    }
+    
+    fn psuedo_legal_moves_queen(&self, piece : Piece) -> u64 {
+        let mut moves: u64 = 0;
+        todo!();
+        moves
+    }
+    
+    fn psuedo_legal_moves_bishop(&self, piece : Piece) -> u64 {
+        let mut moves: u64 = 0;
+        todo!();
+        moves
+    }
+    
+    fn psuedo_legal_moves_knight(&self, piece : Piece) -> u64 {
+        let mut moves: u64 = 0;
+        todo!();
+        moves
+    }
+    
+    fn psuedo_legal_moves_rook(&self, piece : Piece) -> u64 {
+        let mut moves: u64 = 0;
+        todo!();
+        moves
+    }
+    
+    fn psuedo_legal_moves_pawn(&self, piece : Piece) -> u64 {
+        let mut moves: u64 = 0;
+        todo!();
+        moves
     }
     
 }
@@ -72,7 +152,7 @@ pub struct Piece {
     pub just_moved: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum PieceType {
     King,
     Queen,
@@ -82,63 +162,18 @@ pub enum PieceType {
     Pawn,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Color {
     White,
     Black,
 }
 
-
-
-fn psuedo_legal_moves(piece : Piece) -> u64 {
-    match piece.piece_type {
-        PieceType::King => return psuedo_legal_moves_king(piece),
-        PieceType::Queen => return psuedo_legal_moves_queen(piece),
-        PieceType::Bishop => return psuedo_legal_moves_bishop(piece),
-        PieceType::Knight => return psuedo_legal_moves_knight(piece),
-        PieceType::Rook => return psuedo_legal_moves_rook(piece),
-        PieceType::Pawn => return psuedo_legal_moves_pawn(piece),
-    }
-}
-
-fn psuedo_legal_moves_king(piece : Piece) -> u64 {
-    let mut moves: u64 = 0;
-    todo!();
-    moves
-}
-
-fn psuedo_legal_moves_queen(piece : Piece) -> u64 {
-    let mut moves: u64 = 0;
-    todo!();
-    moves
-}
-
-fn psuedo_legal_moves_bishop(piece : Piece) -> u64 {
-    let mut moves: u64 = 0;
-    todo!();
-    moves
-}
-
-fn psuedo_legal_moves_knight(piece : Piece) -> u64 {
-    let mut moves: u64 = 0;
-    todo!();
-    moves
-}
-
-fn psuedo_legal_moves_rook(piece : Piece) -> u64 {
-    let mut moves: u64 = 0;
-    todo!();
-    moves
-}
-
-fn psuedo_legal_moves_pawn(piece : Piece) -> u64 {
-    let mut moves: u64 = 0;
-    todo!();
-    moves
-}
-
 fn pos_to_bitmap(x: u8, y: u8) -> u64 {
     (1 << y*8) << x
+}
+
+fn pos_to_index(x: u8, y: u8) -> u8 {
+    x + y * 8
 }
 
 fn print_bitmap(bitmap: u64) {
@@ -150,7 +185,7 @@ fn print_bitmap(bitmap: u64) {
 
 fn make_color_bitmap(game: Game, color: Color) -> u64 {
     let mut bitmap = 0;
-    for piece in game.live_pieces {
+    for piece in game.live_pieces.values() {
         if piece.color != color {
             continue;
         }
