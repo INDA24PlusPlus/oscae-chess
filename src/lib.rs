@@ -14,81 +14,115 @@ use std::collections::HashMap;
 
 // DATA
 pub struct Game {
-    live_pieces: HashMap<u8, Piece>,
-    turn: Color,
+    live_pieces: HashMap<Square, Piece>,
     fifty_move_rule: u32, // half-moves, reset upon pawn move or capture
     white_bitmap: u64,
     black_bitmap: u64,
+
+    // tells whoose turn it is
+    pub turn: Color,
+    
+    // used for en passant and for highlighting the squares that was just affected
+    // both are set to 255, 255 initially
+    pub last_moved_from: Square,
+    pub last_moved_to: Square,
+    
+    // true if the last move was a capture
+    pub capture: bool,
+
 }
 
 impl Game {
-    pub fn new(&self) -> Self {
+    pub fn new() -> Self {
         let mut live_pieces = HashMap::new();
 
-        let white_template = Piece { piece_type: PieceType::Pawn, color: Color::White, x: 8, y: 0, has_moved: false, just_moved: false};
+        let white_template = Piece { piece_type: PieceType::Pawn, color: Color::White, pos: Square {x: 255, y: 255}, has_moved: false};
         // adding white pieces
-        live_pieces.insert(0, Piece { piece_type: PieceType::Rook,   x: 0, ..white_template });
-        live_pieces.insert(1, Piece { piece_type: PieceType::Knight, x: 1, ..white_template });
-        live_pieces.insert(2, Piece { piece_type: PieceType::Bishop, x: 2, ..white_template });
-        live_pieces.insert(3, Piece { piece_type: PieceType::Queen,  x: 3, ..white_template });
-        live_pieces.insert(4, Piece { piece_type: PieceType::King,   x: 4, ..white_template });
-        live_pieces.insert(5, Piece { piece_type: PieceType::Bishop, x: 5, ..white_template });
-        live_pieces.insert(6, Piece { piece_type: PieceType::Knight, x: 6, ..white_template });
-        live_pieces.insert(7, Piece { piece_type: PieceType::Rook,   x: 7, ..white_template });
+        live_pieces.insert(Square {x: 0, y: 0}, Piece { piece_type: PieceType::Rook,    pos: Square {x: 0, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 1, y: 0}, Piece { piece_type: PieceType::Knight,  pos: Square {x: 1, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 2, y: 0}, Piece { piece_type: PieceType::Bishop,  pos: Square {x: 2, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 3, y: 0}, Piece { piece_type: PieceType::Queen,   pos: Square {x: 3, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 4, y: 0}, Piece { piece_type: PieceType::King,    pos: Square {x: 4, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 5, y: 0}, Piece { piece_type: PieceType::Bishop,  pos: Square {x: 5, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 6, y: 0}, Piece { piece_type: PieceType::Knight,  pos: Square {x: 6, y: 0}, ..white_template });
+        live_pieces.insert(Square {x: 7, y: 0}, Piece { piece_type: PieceType::Rook,    pos: Square {x: 7, y: 0}, ..white_template });
         for i in 0..8 {
-            live_pieces.insert(8 + i, Piece { x: i, y: 1, ..white_template });
+            live_pieces.insert(Square {x: i, y: 1}, Piece { pos: Square {x: i, y: 1}, ..white_template });
         }
         
-        let black_template = Piece { color: Color::Black, y: 7, ..white_template };
+        let black_template = Piece { color: Color::Black, ..white_template };
         // adding black pieces
-        live_pieces.insert(56, Piece { piece_type: PieceType::Rook,   x: 0, ..black_template });
-        live_pieces.insert(57, Piece { piece_type: PieceType::Knight, x: 1, ..black_template });
-        live_pieces.insert(58, Piece { piece_type: PieceType::Bishop, x: 2, ..black_template });
-        live_pieces.insert(59, Piece { piece_type: PieceType::Queen,  x: 3, ..black_template });
-        live_pieces.insert(60, Piece { piece_type: PieceType::King,   x: 4, ..black_template });
-        live_pieces.insert(61, Piece { piece_type: PieceType::Bishop, x: 5, ..black_template });
-        live_pieces.insert(62, Piece { piece_type: PieceType::Knight, x: 6, ..black_template });
-        live_pieces.insert(63, Piece { piece_type: PieceType::Rook,   x: 7, ..black_template });
+        live_pieces.insert(Square {x: 0, y: 7}, Piece { piece_type: PieceType::Rook,   pos: Square {x: 0, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 1, y: 7}, Piece { piece_type: PieceType::Knight, pos: Square {x: 1, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 2, y: 7}, Piece { piece_type: PieceType::Bishop, pos: Square {x: 2, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 3, y: 7}, Piece { piece_type: PieceType::Queen,  pos: Square {x: 3, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 4, y: 7}, Piece { piece_type: PieceType::King,   pos: Square {x: 4, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 5, y: 7}, Piece { piece_type: PieceType::Bishop, pos: Square {x: 5, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 6, y: 7}, Piece { piece_type: PieceType::Knight, pos: Square {x: 6, y: 7}, ..black_template });
+        live_pieces.insert(Square {x: 7, y: 7}, Piece { piece_type: PieceType::Rook,   pos: Square {x: 7, y: 7}, ..black_template });
         for i in 0..8 {
-            live_pieces.insert(48 + i, Piece { x: i, y: 6, ..black_template });
+            live_pieces.insert(Square {x: i, y: 6}, Piece { pos: Square {x: i, y: 6}, ..black_template });
         }
         let turn = Color::White;
         let fifty_move_rule = 0;
 
         let white_bitmap = 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_11111111;
         let black_bitmap = 0b11111111_11111111_00000000_00000000_00000000_00000000_00000000_00000000;
-
-        Self {live_pieces, turn, fifty_move_rule, white_bitmap, black_bitmap}
+        let last_moved_from = Square {x: 255, y: 255};
+        let last_moved_to = Square {x: 255, y: 255};
+        let capture = false;
+        Self {live_pieces, turn, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture}
     }
 
-    pub fn get_board_state(&self) -> HashMap<u8, Piece> {
+    pub fn get_board_state(&self) -> HashMap<Square, Piece> {
         self.live_pieces.clone()
     }
 
     // moves the piece and takes whatever is in the way, does not do any checks
-    fn force_move(&mut self, piece: &mut Piece, x: u8, y: u8) -> Result<(), String> {
-        if x > 7 || y > 7 {
+    fn force_move(&mut self, piece: &mut Piece, to: Square) -> Result<(), String> {
+        if to.x > 7 || to.y > 7 {
             Err("Position out of bounds!".to_string())
         } else {
-            let pos_bitmap = pos_to_bitmap(x, y);
+            let pos_bitmap = to.to_bitmap();
+
+            // increment fifty_move_rule every move. Incremented before it might be reset.
+            self.fifty_move_rule += 1;
 
             if (self.black_bitmap | self.white_bitmap) & pos_bitmap != 0 { // if there is other piece in pos
-                self.live_pieces.remove(&pos_to_index(x, y));
+                self.live_pieces.remove(&to); // we capture it (we dont care what piece it was in this function)
+                self.fifty_move_rule = 0;
+            }
+
+            // reset fifty_move_rule if a pawn was moved
+            if (piece.piece_type == PieceType::Pawn) {
+                self.fifty_move_rule = 0;
             }
 
             if piece.color == Color::White {
                 
-                self.white_bitmap &= !pos_to_bitmap(piece.x, piece.y); // turn off bit we moved from
+                self.white_bitmap &= !piece.pos.to_bitmap(); // turn off bit we moved from
                 self.white_bitmap |= pos_bitmap; // turn on bit we moved to
             } else {
-                self.black_bitmap &= !pos_to_bitmap(piece.x, piece.y); // turn off bit we moved from
+                self.black_bitmap &= !piece.pos.to_bitmap(); // turn off bit we moved from
                 self.black_bitmap |= pos_bitmap; // turn on bit we moved to
             }
             
-            piece.x = x;
-            piece.y = y;
+            // we remove the piece to change its key
+            self.live_pieces.remove(&piece.pos);
+
+            // we set the last_moved data
+            self.last_moved_from = piece.pos;
+            self.last_moved_to = to;
+
+            // we change som data of piece
+            piece.pos = to;
             piece.has_moved = true;
-            piece.just_moved = true;
+
+
+            // we insert the piece so that the key was changed
+            // cloning piece should be fine as it only contains primitive types
+            self.live_pieces.insert(to, piece.clone());
+            
             Ok(())
         }
     }
@@ -105,13 +139,18 @@ impl Game {
     }
     
     fn psuedo_legal_moves_king(&self, piece : Piece) -> u64 {
-        let mut moves: u64 = pos_to_bitmap(piece.x, piece.y);
-        todo!();
-        moves
+        let mut moves: u64 = piece.pos.to_bitmap();
+        moves |= moves << 1 | moves >> 1;
+        moves |= moves << 8 | moves >> 8;
+        match piece.color {
+            // this will also remove all squares that are occupied by the same colored pieces
+            Color::White => moves & !&self.white_bitmap,
+            Color::Black => moves & !&self.black_bitmap,
+        }
     }
     
     fn psuedo_legal_moves_queen(&self, piece : Piece) -> u64 {
-        let mut moves: u64 = 0;
+        let mut moves: u64 = piece.pos.to_bitmap();
         todo!();
         moves
     }
@@ -146,10 +185,33 @@ impl Game {
 pub struct Piece {
     pub piece_type: PieceType,
     pub color: Color,
+    pub pos: Square,
+    pub has_moved: bool, // used for castling
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Square {
     pub x: u8, // A-H (represented in code as 0-7)
     pub y: u8, // 1-8 (represented in code as 0-7)
-    pub has_moved: bool,
-    pub just_moved: bool,
+}
+
+impl Square {
+    pub fn from(pos: (u8, u8)) -> Self {
+        Self {x: pos.0, y: pos.1}
+    }
+
+    // returns the square number as if they were indexed from 0,0 to 7,0 to 1,0 and so on until 7,7
+    fn to_index(&self) -> u8 {
+        self.x + self.y * 8
+    }
+
+    fn to_bitmap(&self) -> u64 {
+        (1 << self.y*8) << self.x
+    }
+
+    fn to_tuple(&self) -> (u8, u8) {
+        (self.x, self.y)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
