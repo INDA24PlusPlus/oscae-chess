@@ -20,7 +20,9 @@ pub struct Game {
     black_bitmap: u64,
 
     // tells whoose turn it is
-    pub turn: Color,
+    pub turn: PieceColor,
+    // tells the result
+    pub result: ChessResult,
     
     // used for en passant and for highlighting the squares that was just affected
     // both are set to -1, -1 initially
@@ -29,14 +31,13 @@ pub struct Game {
     
     // true if the last move was a capture
     pub capture: bool,
-
 }
 
 impl Game {
     pub fn new() -> Self {
         let mut live_pieces = HashMap::new();
 
-        let white_template = Piece { piece_type: PieceType::Pawn, color: Color::White, pos: Square {x: -1, y: -1}, has_moved: false};
+        let white_template = Piece { piece_type: PieceType::Pawn, color: PieceColor::White, pos: Square {x: -1, y: -1}, has_moved: false};
         // adding white pieces
         live_pieces.insert(Square {x: 0, y: 0}, Piece { piece_type: PieceType::Rook,    pos: Square {x: 0, y: 0}, ..white_template });
         live_pieces.insert(Square {x: 1, y: 0}, Piece { piece_type: PieceType::Knight,  pos: Square {x: 1, y: 0}, ..white_template });
@@ -50,7 +51,7 @@ impl Game {
             live_pieces.insert(Square {x: i, y: 1}, Piece { pos: Square {x: i, y: 1}, ..white_template });
         }
         
-        let black_template = Piece { color: Color::Black, ..white_template };
+        let black_template = Piece { color: PieceColor::Black, ..white_template };
         // adding black pieces
         live_pieces.insert(Square {x: 0, y: 7}, Piece { piece_type: PieceType::Rook,    pos: Square {x: 0, y: 7}, ..black_template });
         live_pieces.insert(Square {x: 1, y: 7}, Piece { piece_type: PieceType::Knight,  pos: Square {x: 1, y: 7}, ..black_template });
@@ -63,7 +64,8 @@ impl Game {
         for i in 0..8 {
             live_pieces.insert(Square {x: i, y: 6}, Piece { pos: Square {x: i, y: 6}, ..black_template });
         }
-        let turn = Color::White;
+        let turn = PieceColor::White;
+        let result = ChessResult::Ongoing;
         let fifty_move_rule = 0;
 
         let white_bitmap = 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_11111111;
@@ -71,11 +73,64 @@ impl Game {
         let last_moved_from = Square {x: -1, y: -1};
         let last_moved_to = Square {x: -1, y: -1};
         let capture = false;
-        Self {live_pieces, turn, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture}
+        Self {live_pieces, turn, result, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture}
     }
 
-    pub fn get_board_state(&self) -> HashMap<Square, Piece> {
-        self.live_pieces.clone()
+    // returns a reference to the hashmap of live pieces
+    pub fn get_board_state(&self) -> &HashMap<Square, Piece> {
+        &self.live_pieces
+    }
+
+    // returns a vec of Square, of all legal moves that can be made from the square "from"
+    pub fn get_moves_list(&self, from : &Square) -> Vec<Square> {
+        match self.live_pieces.get(from) {
+            Some(piece) => {
+                let mut moves = Vec::new();
+                let moves_bitmap = self.legal_moves(piece);
+                for i in 0..64 {
+                    if (moves_bitmap >> i) & 1 != 0 {
+                        moves.push(Square::from(i));
+                    }
+                }
+                moves
+            },
+            None => return Vec::new(),
+        }
+    }
+
+    // returns a bitmap of all legal moves that can be made from the square "from"
+    pub fn get_moves_bitmap(&self, from: &Square) -> u64 {
+        match self.live_pieces.get(from) {
+            Some(piece) => self.legal_moves(piece),
+            None => return 0,
+        }
+    }
+
+    // does a move and returns true if it was successful
+    pub fn do_move(&mut self, from: &Square, to: &Square) -> bool {
+        let mut piece = match self.live_pieces.get(from) {
+            Some(p) => p.clone(),
+            None => return false,
+        };
+
+        if self.legal_moves(&piece) & to.to_bitmap() != 0 {
+            // legal move
+            match self.force_move(&mut piece, *to) {
+                Ok(_) => true,
+                Err(_) => false,
+            }
+        } else {
+            // illegal move
+            false
+        }
+    }
+
+    // removes any piece in the square and updates bitmaps
+    fn capture(&mut self, square: &Square) {
+        self.live_pieces.remove(&square);
+        
+        self.white_bitmap &= !square.to_bitmap(); 
+        self.black_bitmap &= !square.to_bitmap(); 
     }
 
     // moves the piece and takes whatever is in the way, does not do any checks
@@ -90,8 +145,9 @@ impl Game {
             self.fifty_move_rule += 1;
             self.capture = false;
 
-            if (self.black_bitmap | self.white_bitmap) & pos_bitmap != 0 { // if there is other piece in pos
-                self.live_pieces.remove(&to); // we capture it (we dont care what piece it was in this function)
+            if (self.black_bitmap | self.white_bitmap) & pos_bitmap != 0 { // if there is other piece in pos, capture
+
+                self.capture(&to); // we capture it (we dont care what piece it was in this function)
                 self.fifty_move_rule = 0;
                 self.capture = true;
             }
@@ -105,21 +161,19 @@ impl Game {
                 if piece.pos.x != to.x && !self.capture {
                     // if execution got here it was en passant. Capture the piece that is behind the pawn after the move
                     // determine direction of pawn
-                    let direction = match piece.color {
-                        Color::White => 1,
-                        Color::Black => -1
-                    };
-                    self.live_pieces.remove(&to.moved(0, -direction));
+                    let direction = piece.get_direction();
+                    self.capture(&to.moved(0, -direction));
                     self.capture = true;
                 }
             }
 
+            // update bitmap
             match piece.color {
-                Color::White =>  {
+                PieceColor::White =>  {
                     self.white_bitmap &= !piece.pos.to_bitmap(); // turn off bit we moved from
                     self.white_bitmap |= pos_bitmap; // turn on bit we moved to
                 },
-                Color::Black => {
+                PieceColor::Black => {
                     self.black_bitmap &= !piece.pos.to_bitmap(); // turn off bit we moved from
                     self.black_bitmap |= pos_bitmap; // turn on bit we moved to
                 }
@@ -144,16 +198,78 @@ impl Game {
         }
     }
 
-    fn legal_moves(&self, piece: Piece) -> u64 {
-        let moves = self.psuedo_legal_moves(piece);
+    // psuedo legal moves but removes any that puts you in check
+    fn legal_moves(&self, piece: &Piece) -> u64 {
+        let (own_color_bitmap, other_color_bitmap) = match piece.color {
+            PieceColor::White => (&self.white_bitmap, &self.black_bitmap),
+            PieceColor::Black => (&self.black_bitmap, &self.white_bitmap)
+        };
+        
+        let pos_bitmap = piece.pos.to_bitmap();
+        let mut moves = self.psuedo_legal_moves(piece);
 
         // remove everything that puts the king in check
-        
+
+        // create a new own_color_bitmap that represents after each move
+        // if en passant is possible also make a new other_color_bitmap
+        // loop through each opponents pieces and get their psuedo legal moves with the new own color bitmap
+        // combine all opponents psuedo moves with | and compare with kings position using &
+        // if it is 0 then the move is legal, otherwise remove that bit from the moves bitmap
+        // repeat for every move in moves
+
+        // get position of king (assumes the king wasnt moved)
+        let own_king_bitmap = match self.live_pieces.iter().find(|(_, x)| x.piece_type == PieceType::King && x.color == piece.color) {
+            Some((pos, _)) => pos.to_bitmap(),
+            None => return moves, // if there is no king we say that all psuedo legal moves are legal
+        };
+
+        // loops through all moves in moves
+        for i in 0..64 {
+            if (moves >> i) & 1 == 0 {
+                continue;
+            }
+            
+            let possible_move = Square::from(i);
+            let possible_move_bitmap = possible_move.to_bitmap();
+            
+            // remove old position and add new position to bitmap:
+            let new_own_color_bitmap = (own_color_bitmap & !pos_bitmap) | possible_move_bitmap;
+
+            // only changes if we take and only matters for en passant
+            let new_other_color_bitmap;
+
+            // scary situation here: en passant may be one of the allowed moves 
+            // and we cant make the assumption that we can take a piece that was pinned because we will not occupy its square
+            // we know it is en passant if the piece is a pawn and the psuedo legal move is diagonal and to an empty space
+            if piece.piece_type == PieceType::Pawn && piece.pos.x != possible_move.x && other_color_bitmap & possible_move_bitmap == 0 {
+                // en passant!!!
+                new_other_color_bitmap = other_color_bitmap & !possible_move.moved(0, -piece.get_direction()).to_bitmap();
+            } else {
+                // not en passant, just remove the square the move is to from opponent bitmap
+                new_other_color_bitmap = other_color_bitmap & !possible_move_bitmap;
+            }
+
+            // get king position (even if it was moved)
+            let own_king_bitmap = if piece.piece_type == PieceType::King {
+                possible_move_bitmap
+            }
+            else {
+                own_king_bitmap
+            };
+
+            for (_, opponent_piece) in self.live_pieces.iter().filter(|(_, x)| { x.color != piece.color}) {
+                if self.psuedo_legal_moves(opponent_piece) & own_king_bitmap != 0 { // is king put in check
+                    moves &= !possible_move_bitmap; // removes this move if the king was put in check
+                    break;
+                }
+            }
+        }
+
 
         moves
     }
 
-    fn psuedo_legal_moves(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves(&self, piece : &Piece) -> u64 {
         match piece.piece_type {
             PieceType::King => return self.psuedo_legal_moves_king(piece),
             PieceType::Queen => return self.psuedo_legal_moves_queen(piece),
@@ -164,7 +280,7 @@ impl Game {
         }
     }
     
-    fn psuedo_legal_moves_king(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves_king(&self, piece : &Piece) -> u64 {
         let moves :u64 =
             piece.pos.moved( 1,  0).to_bitmap() | // east
             piece.pos.moved( 1,  1).to_bitmap() | // north-east
@@ -177,16 +293,16 @@ impl Game {
 
         match piece.color {
             // this will remove all squares that are occupied by the same colored pieces
-            Color::White => moves & !&self.white_bitmap,
-            Color::Black => moves & !&self.black_bitmap,
+            PieceColor::White => moves & !&self.white_bitmap,
+            PieceColor::Black => moves & !&self.black_bitmap,
         }
     }
     
-    fn psuedo_legal_moves_queen(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves_queen(&self, piece : &Piece) -> u64 {
         // this will be used to stop the piece from going through other pieces
         let (own_color_bitmap, other_color_bitmap) = match piece.color {
-            Color::White => (&self.white_bitmap, &self.black_bitmap),
-            Color::Black => (&self.black_bitmap, &self.white_bitmap)
+            PieceColor::White => (&self.white_bitmap, &self.black_bitmap),
+            PieceColor::Black => (&self.black_bitmap, &self.white_bitmap)
         };
 
         bitmap_line(piece.pos,  1,  0, own_color_bitmap, other_color_bitmap) | // east
@@ -199,11 +315,11 @@ impl Game {
         bitmap_line(piece.pos,  1, -1, own_color_bitmap, other_color_bitmap)   // south-east
     }
     
-    fn psuedo_legal_moves_bishop(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves_bishop(&self, piece : &Piece) -> u64 {
         // this will be used to stop the piece from going through other pieces
         let (own_color_bitmap, other_color_bitmap) = match piece.color {
-            Color::White => (&self.white_bitmap, &self.black_bitmap),
-            Color::Black => (&self.black_bitmap, &self.white_bitmap)
+            PieceColor::White => (&self.white_bitmap, &self.black_bitmap),
+            PieceColor::Black => (&self.black_bitmap, &self.white_bitmap)
         };
 
         bitmap_line(piece.pos,  1,  1, own_color_bitmap, other_color_bitmap) | // north-east
@@ -212,7 +328,7 @@ impl Game {
         bitmap_line(piece.pos,  1, -1, own_color_bitmap, other_color_bitmap)   // south-east
     }
     
-    fn psuedo_legal_moves_knight(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves_knight(&self, piece : &Piece) -> u64 {
         let moves :u64 =
             piece.pos.moved( 2,  1).to_bitmap() | // 02:00
             piece.pos.moved( 1,  2).to_bitmap() | // 01:00
@@ -225,16 +341,16 @@ impl Game {
 
         match piece.color {
             // this will remove all squares that are occupied by the same colored pieces
-            Color::White => moves & !&self.white_bitmap,
-            Color::Black => moves & !&self.black_bitmap,
+            PieceColor::White => moves & !&self.white_bitmap,
+            PieceColor::Black => moves & !&self.black_bitmap,
         }
     }
     
-    fn psuedo_legal_moves_rook(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves_rook(&self, piece : &Piece) -> u64 {
         // this will be used to stop the piece from going through other pieces
         let (own_color_bitmap, other_color_bitmap) = match piece.color {
-            Color::White => (&self.white_bitmap, &self.black_bitmap),
-            Color::Black => (&self.black_bitmap, &self.white_bitmap)
+            PieceColor::White => (&self.white_bitmap, &self.black_bitmap),
+            PieceColor::Black => (&self.black_bitmap, &self.white_bitmap)
         };
 
         bitmap_line(piece.pos,  1,  0, own_color_bitmap, other_color_bitmap) | // east
@@ -243,17 +359,15 @@ impl Game {
         bitmap_line(piece.pos,  0, -1, own_color_bitmap, other_color_bitmap)   // south
     }
     
-    fn psuedo_legal_moves_pawn(&self, piece : Piece) -> u64 {
+    fn psuedo_legal_moves_pawn(&self, piece : &Piece) -> u64 {
         // used for move calculation and to determine what direction this pawn moves in
-        let direction: i8;
-        let (own_color_bitmap, other_color_bitmap) = match piece.color {
-            Color::White => {
-                direction = 1;
-                (&self.white_bitmap, &self.black_bitmap)
+        let direction: i8 = piece.get_direction();
+        let other_color_bitmap = match piece.color {
+            PieceColor::White => {
+                &self.black_bitmap
             },
-            Color::Black => {
-                direction = -1;
-                (&self.black_bitmap, &self.white_bitmap)
+            PieceColor::Black => {
+                &self.white_bitmap
             }
         };
 
@@ -274,11 +388,14 @@ impl Game {
         // check for en passant
         // we know can assume it exists in live_pieces because it was just moved there
         // and that it is of the opponents color because last_moved_to is always the opponent
-        if self.live_pieces.get(&self.last_moved_to).unwrap().piece_type == PieceType::Pawn &&
-            self.last_moved_to.y + direction * 2 == self.last_moved_from.y { // checking if it just moved two steps
-            
-            moves |= self.last_moved_to.moved(0, direction).to_bitmap();
-        }
+        match self.live_pieces.get(&self.last_moved_to) {
+            Some(p) => {
+                if p.piece_type == PieceType::Pawn && self.last_moved_to.y + direction * 2 == self.last_moved_from.y {
+                    moves |= self.last_moved_to.moved(0, direction).to_bitmap(); 
+                }
+            },
+            None => {}, // likely the last moved data wasnt set (as in the start)
+        };
 
         moves 
     }
@@ -288,9 +405,18 @@ impl Game {
 #[derive(Clone)]
 pub struct Piece {
     pub piece_type: PieceType,
-    pub color: Color,
+    pub color: PieceColor,
     pub pos: Square,
     pub has_moved: bool, // used for castling
+}
+
+impl Piece {
+    fn get_direction(&self) -> i8 {
+        match self.color {
+            PieceColor::White => 1,
+            PieceColor::Black => -1
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -299,14 +425,22 @@ pub struct Square {
     pub y: i8, // 1-8 (represented in code as 0-7)
 }
 
-impl Square {
+impl From<i8> for Square {
+    fn from(value: i8) -> Self {
+        Self {x: value % 8, y: value / 8}
+    }
+}
+
+impl From<(i8, i8)> for Square {
     // initialize from a tuple of (i8, i8)
-    pub fn from(pos: (i8, i8)) -> Self {
+    fn from(pos: (i8, i8)) -> Self {
         Self {x: pos.0, y: pos.1}
     }
+}
 
+impl Square {
     // returns the square number as if they were indexed from 0,0 to 7,0 to 1,0 and so on until 7,7
-    fn to_index(&self) -> i8 {
+    pub fn to_index(&self) -> i8 {
         self.x + self.y * 8
     }
 
@@ -319,7 +453,7 @@ impl Square {
         (1 << self.y*8) << self.x
     }
 
-    fn to_tuple(&self) -> (i8, i8) {
+    pub fn to_tuple(&self) -> (i8, i8) {
         (self.x, self.y)
     }
 
@@ -361,9 +495,17 @@ pub enum PieceType {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-pub enum Color {
+pub enum PieceColor {
     White,
     Black,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum ChessResult {
+    Ongoing,
+    WhiteWon,
+    BlackWon,
+    Draw,
 }
 
 // makes a line from start (exclusive) until it collides with edge or a piece marked in own_color_bitmap or after colliding with a piece marked in other_color_bitmap
@@ -398,7 +540,7 @@ fn print_bitmap(bitmap: u64) {
     
 }
 
-fn make_color_bitmap(game: Game, color: Color) -> u64 {
+fn make_color_bitmap(game: Game, color: PieceColor) -> u64 {
     let mut bitmap = 0;
     for piece in game.live_pieces.values() {
         if piece.color != color {
@@ -429,10 +571,10 @@ mod tests {
 
     #[test]
     fn test_color() {
-        let col1 = Color::White;
-        let col2 = Color::White;
-        let col3 = Color::Black;
-        let col4 = Color::Black;
+        let col1 = PieceColor::White;
+        let col2 = PieceColor::White;
+        let col3 = PieceColor::Black;
+        let col4 = PieceColor::Black;
         assert!(col1 == col2);
         assert!(col2 == col1);
         assert!(col3 == col4);
