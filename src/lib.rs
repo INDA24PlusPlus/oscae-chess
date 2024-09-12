@@ -186,16 +186,57 @@ impl Game {
                 }
             }
 
+            // castle
+            let (castle_bitmap_add, castle_bitmap_remove) = if piece.piece_type == PieceType::King && !piece.has_moved {
+                if piece.pos.moved(-2, 0) == to {
+                    match self.live_pieces.get(&Square::from((0,piece.pos.y))) {
+                        Some(rook) => {
+                            let mut rook = rook.clone();
+                            self.live_pieces.remove(&rook.pos);
+                            rook.has_moved = true;
+                            let castle_bitmap_remove = rook.pos.to_bitmap();
+                            rook.pos = to.moved(1, 0);
+                            let castle_bitmap_add = rook.pos.to_bitmap();
+                            self.live_pieces.insert(rook.pos, rook);
+
+                            // update bitmap
+                            (castle_bitmap_add, castle_bitmap_remove)
+                        },
+                        None => (0, 0),
+                    }
+                } else if piece.pos.moved(2, 0) == to {
+                    match self.live_pieces.get(&Square::from((0,piece.pos.y))) {
+                        Some(rook) => {
+                            let mut rook = rook.clone();
+                            self.live_pieces.remove(&rook.pos);
+                            rook.has_moved = true;
+                            let castle_bitmap_remove = rook.pos.to_bitmap();
+                            rook.pos = to.moved(1, 0);
+                            let castle_bitmap_add = rook.pos.to_bitmap();
+                            self.live_pieces.insert(rook.pos, rook);
+
+                            // update bitmap
+                            (castle_bitmap_add, castle_bitmap_remove)
+                        },
+                        None => (0, 0),
+                    }
+                } else {
+                    (0, 0)
+                }
+            } else {
+                (0, 0)
+            };
+
             // update bitmap and set own and other_color_bitmap for later checking for check
             let (own_color_bitmap, other_color_bitmap) =  match piece.color {
                 PieceColor::White =>  {
-                    self.white_bitmap &= !piece.pos.to_bitmap(); // turn off bit we moved from
-                    self.white_bitmap |= pos_bitmap; // turn on bit we moved to
+                    self.white_bitmap &= !(piece.pos.to_bitmap() | castle_bitmap_remove); // turn off bit we moved from
+                    self.white_bitmap |= pos_bitmap | castle_bitmap_add; // turn on bit we moved to
                     (self.white_bitmap, self.black_bitmap)
                 },
                 PieceColor::Black => {
-                    self.black_bitmap &= !piece.pos.to_bitmap(); // turn off bit we moved from
-                    self.black_bitmap |= pos_bitmap; // turn on bit we moved to
+                    self.black_bitmap &= !(piece.pos.to_bitmap() | castle_bitmap_remove); // turn off bit we moved from
+                    self.black_bitmap |= pos_bitmap | castle_bitmap_add; // turn on bit we moved to
                     (self.black_bitmap, self.white_bitmap)
                 }
             };
@@ -223,8 +264,8 @@ impl Game {
                 None => 0, // no king
             };
             self.check = false; // reset check
-            for (_, this_turn_pieces) in self.live_pieces.iter().filter(|(_, x)| { x.color == self.turn}) {
-                if self.psuedo_legal_moves(this_turn_pieces, own_color_bitmap, other_color_bitmap) & other_king_bitmap != 0 {
+            for (_, this_turn_colored_pieces) in self.live_pieces.iter().filter(|(_, x)| { x.color == self.turn}) {
+                if self.psuedo_legal_moves(this_turn_colored_pieces, own_color_bitmap, other_color_bitmap) & other_king_bitmap != 0 {
                     // the opponent is put in check
                     self.check = true;
                     break;
@@ -270,7 +311,7 @@ impl Game {
         }
     }
 
-    // psuedo legal moves but removes any that puts you in check
+    // psuedo legal moves but removes any that puts you in check, includes castling
     fn legal_moves(&self, piece: &Piece) -> u64 {
         let (own_color_bitmap, other_color_bitmap) = match piece.color {
             PieceColor::White => (self.white_bitmap, self.black_bitmap),
@@ -279,6 +320,34 @@ impl Game {
         
         let pos_bitmap = piece.pos.to_bitmap();
         let mut moves = self.psuedo_legal_moves(piece, own_color_bitmap, other_color_bitmap);
+
+        // add castling to moves if legal
+        if piece.piece_type == PieceType::King && !piece.has_moved {
+
+            // castle to the left (long castle)
+            match self.live_pieces.get(&Square {x: 0, y: piece.pos.y}) {
+                Some(rook) => {
+                    if rook.piece_type == PieceType::Rook &&
+                        !rook.has_moved &&
+                        bitmap_line(piece.pos, -1, 0, own_color_bitmap, other_color_bitmap) & Square::from((1, piece.pos.y)).to_bitmap() != 0 {
+                        moves |= piece.pos.moved(-2, 0).to_bitmap();
+                    }
+                },
+                None => {},
+            }
+
+            // castle to the right (short castle)
+            match self.live_pieces.get(&Square {x: 7, y: piece.pos.y}) {
+                Some(rook) => {
+                    if rook.piece_type == PieceType::Rook &&
+                        !rook.has_moved &&
+                        bitmap_line(piece.pos, 1, 0, own_color_bitmap, other_color_bitmap) & Square::from((6, piece.pos.y)).to_bitmap() != 0 {
+                        moves |= piece.pos.moved(2, 0).to_bitmap();
+                    }
+                },
+                None => {},
+            }
+        }
 
         // remove everything that puts the king in check
 
@@ -338,10 +407,23 @@ impl Game {
                 }
             }
         }
+        // remove castle if the in between square was in check
+        if piece.piece_type == PieceType::King {
+            // left castle (long)
+            if piece.pos.moved(-1, 0).to_bitmap() & moves == 0 {
+                moves &= !piece.pos.moved(-2, 0).to_bitmap();
+            }
+
+            // right castle (short)
+            if piece.pos.moved(1, 0).to_bitmap() & moves == 0 {
+                moves &= !piece.pos.moved(2, 0).to_bitmap();
+            }
+        }
 
         moves
     }
 
+    // returns a bitmap of all possible moves for that piece without considering check, and does not include castling
     fn psuedo_legal_moves(&self, piece : &Piece, own_color_bitmap : u64, other_color_bitmap : u64) -> u64 {
         match piece.piece_type {
             PieceType::King => return self.psuedo_legal_moves_king(piece, own_color_bitmap),
@@ -353,6 +435,7 @@ impl Game {
         }
     }
     
+    // does not include castling because it should not be accounted for in check
     fn psuedo_legal_moves_king(&self, piece : &Piece, own_color_bitmap : u64) -> u64 {
         let moves :u64 =
             piece.pos.moved( 1,  0).to_bitmap() | // east
@@ -580,10 +663,6 @@ fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
     bitmap
 }
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -600,11 +679,5 @@ mod tests {
         assert!(col1 != col3);
         assert!(col4 != col2);
         assert!(!(col1 != col2));
-    }
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
     }
 }
