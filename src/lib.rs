@@ -708,6 +708,18 @@ fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
     bitmap
 }
 
+// TODO
+// tests for all functions
+// perft?
+// 3 repeated states rule
+// pawn promotion
+// draw by insufficient material
+// chess notation for importing and testing games
+// exporting games
+// option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
+// make it possible to call out draw if it is not automatic
+// and more!
+
 #[cfg(test)]
 mod tests {
     use super::*;
