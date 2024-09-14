@@ -322,7 +322,7 @@ impl Game {
         let mut moves = self.psuedo_legal_moves(piece, own_color_bitmap, other_color_bitmap);
 
         // add castling to moves if legal
-        if piece.piece_type == PieceType::King && !piece.has_moved {
+        if piece.piece_type == PieceType::King && !piece.has_moved && !self.check { // cant escape check by castling
 
             // castle to the left (long castle)
             match self.live_pieces.get(&Square {x: 0, y: piece.pos.y}) {
@@ -564,10 +564,55 @@ impl From<(i8, i8)> for Square {
     }
 }
 
+impl From<&str> for Square {
+    // initialize from a two values of i8, i8
+    fn from(pos: &str) -> Square {
+        let mut pos = pos.trim().chars();
+        let x: i8 = match pos.next(){
+            Some(c) => {
+                match c.to_ascii_uppercase() {
+                    'A' => 0,
+                    'B' => 1,
+                    'C' => 2,
+                    'D' => 3,
+                    'E' => 4,
+                    'F' => 5,
+                    'G' => 6,
+                    'H' => 7,
+                    _ => -1,
+                }
+            },
+            None => -1,
+        };
+
+        let y: i8 = match pos.next(){
+            Some(c) => {
+                match c {
+                    '1' => 0,
+                    '2' => 1,
+                    '3' => 2,
+                    '4' => 3,
+                    '5' => 4,
+                    '6' => 5,
+                    '7' => 6,
+                    '8' => 7,
+                    _ => -1,
+                }
+            },
+            None => -1,
+        };
+        Self {x: x, y: y}
+    }
+}
+
 impl Square {
     // returns the square number as if they were indexed from 0,0 to 7,0 to 1,0 and so on until 7,7
     pub fn to_index(&self) -> i8 {
         self.x + self.y * 8
+    }
+
+    pub fn to_notation(&self) -> String {
+        format!("{}{}", (b'A' + self.x as u8) as char, self.y + 1)
     }
 
     // returns the position as a bitmap, if the position is outside the board it returns 0 (empty bitmap)
@@ -680,4 +725,22 @@ mod tests {
         assert!(col4 != col2);
         assert!(!(col1 != col2));
     }
+
+    #[test]
+    fn test_notation() {
+        let square = Square::from((4, 5));
+        assert!(square.x == 4);
+        assert!(square.y == 5);
+
+        
+        assert!(square.y == 5);
+    }
+
+    // Regression tests: se till att inte buggar återuppstår
+
+    // Fuzz testing: testa random input
+
+    // Stress testing: Testar hur ett system hanterar exceptionella situationer
+
+    // Benchmarks: Testar performance av kod, hård gräns på tid, t.ex realtime systems (Flygplan, spel etc)
 }
