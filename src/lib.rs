@@ -171,7 +171,7 @@ impl Game {
     // selects the piece to promote a pawn to. will return false if invalid PieceType whas passed
     pub fn pawn_promotion(&mut self, class: PieceType) -> bool {
         // return false if class is king or pawn
-        if class == PieceType::King || class == PieceType::Pawn {
+        if class == PieceType::King || class == PieceType::Pawn || !self.promotion {
             return false;
         }
 
@@ -191,6 +191,16 @@ impl Game {
     pub fn declare_draw(&mut self) {
         if self.result == ChessResult::Ongoing {
             self.result = ChessResult::Draw;
+        }
+    }
+
+    // ends the game immediatly and declares a winner
+    pub fn declare_win(&mut self, color: PieceColor) {
+        if self.result == ChessResult::Ongoing {
+            self.result = match color {
+                PieceColor::White => ChessResult::WhiteWon,
+                PieceColor::Black => ChessResult::BlackWon,
+            };
         }
     }
 
@@ -388,7 +398,6 @@ impl Game {
                     PieceType::King => continue,
                     PieceType::Bishop => continue,
                     PieceType::Knight => continue,
-                    PieceType::Rook => continue,
                     _ => { do_draw = false; break; },
                 }
             }
@@ -917,7 +926,6 @@ impl From<&Game> for BoardValue {
 // TODO
 // timer
 // write read me
-// draw by insufficient material
 // tests for all functions
 // chess notation for importing and testing games
 // perft?
