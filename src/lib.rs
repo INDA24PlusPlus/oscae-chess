@@ -37,6 +37,12 @@ pub struct Game {
 
     // true if the move lead to promotion and pawn_promotion() has to be called
     pub promotion: bool,
+
+    // lists of captured pieces
+    // white pieces that was captured
+    pub white_captured_pieces : Vec<PieceType>,
+    // black pieces that was captured
+    pub black_captured_pieces : Vec<PieceType>,
 }
 
 impl Game {
@@ -81,7 +87,9 @@ impl Game {
         let capture = false;
         let check = false;
         let promotion = false;
-        Self {live_pieces, turn, result, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion}
+        let white_captured_pieces = Vec::new();
+        let black_captured_pieces = Vec::new();
+        Self {live_pieces, turn, result, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion, white_captured_pieces, black_captured_pieces}
     }
 
     // returns a reference to the hashmap of live pieces
@@ -176,8 +184,19 @@ impl Game {
 
     // removes any piece in the square and updates bitmaps
     fn capture(&mut self, square: &Square) {
-        self.live_pieces.remove(&square);
+
+        // remove piece and add it to captured lsit
+        match self.live_pieces.remove(&square) {
+            Some(piece) => {
+                match piece.color {
+                    PieceColor::White => self.white_captured_pieces.push(piece.piece_type),
+                    PieceColor::Black => self.black_captured_pieces.push(piece.piece_type),
+                }
+            },
+            None => (),
+        }
         
+        // update bitmaps
         self.white_bitmap &= !square.to_bitmap(); 
         self.black_bitmap &= !square.to_bitmap(); 
     }
@@ -770,7 +789,6 @@ fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
 // exporting games
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
 // make it possible to call out draw if it is not automatic
-// function that retrieves a list of all captured pieces
 // and more!
 
 #[cfg(test)]
