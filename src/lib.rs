@@ -34,6 +34,9 @@ pub struct Game {
 
     // true if the current player is in check
     pub check: bool,
+
+    // true if the move lead to promotion and pawn_promotion() has to be called
+    pub promotion: bool,
 }
 
 impl Game {
@@ -77,7 +80,8 @@ impl Game {
         let last_moved_to = Square {x: -1, y: -1};
         let capture = false;
         let check = false;
-        Self {live_pieces, turn, result, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check}
+        let promotion = false;
+        Self {live_pieces, turn, result, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion}
     }
 
     // returns a reference to the hashmap of live pieces
@@ -122,6 +126,8 @@ impl Game {
 
     // does a move and returns true if it was successful
     pub fn do_move(&mut self, from: &Square, to: &Square) -> bool {
+
+        // get piece at "from"
         let mut piece = match self.live_pieces.get(from) {
             Some(p) => p.clone(),
             None => return false,
@@ -129,6 +135,11 @@ impl Game {
 
         // return false if it is not this piece's turn
         if piece.color != self.turn {
+            return false;
+        }
+
+        // return false if a promotion has to be done using pawn_promotion()
+        if self.promotion {
             return false;
         }
 
@@ -144,6 +155,25 @@ impl Game {
         }
     }
 
+    // selects the piece to promote a pawn to. will return false if invalid PieceType whas passed
+    pub fn pawn_promotion(&mut self, class: PieceType) -> bool {
+        // return false if class is king or pawn
+        if class == PieceType::King || class == PieceType::Pawn {
+            return false;
+        }
+
+        // do promotion and finish move with post_move()
+        match self.live_pieces.get_mut(&self.last_moved_to) {
+            Some(piece) => {
+                piece.piece_type = class;
+                self.promotion = false;
+                self.post_move();
+                true
+            },
+            None => false,
+        }
+    }
+
     // removes any piece in the square and updates bitmaps
     fn capture(&mut self, square: &Square) {
         self.live_pieces.remove(&square);
@@ -154,9 +184,11 @@ impl Game {
 
     // moves the piece and takes whatever is in the way, does not do any checks
     // will also do en passant
-    fn force_move(&mut self, piece: &mut Piece, to: Square) -> Result<(), String> {
+    fn force_move(&mut self, piece: &mut Piece, to: Square) -> Result<(), &str> {
         if to.x > 7 || to.y > 7 {
-            Err("Position out of bounds!".to_string())
+            Err("Position out of bounds!")
+        } else if self.promotion {
+            Err("Pawn has to be promoted first! call pawn_promotion()")
         } else {
             let pos_bitmap = to.to_bitmap();
 
@@ -183,6 +215,14 @@ impl Game {
                     let direction = piece.get_direction();
                     self.capture(&to.moved(0, -direction));
                     self.capture = true;
+                }
+
+                // check for promotion
+                if to.y == match piece.color {
+                    PieceColor::White => 7, // white promotes at y=7
+                    PieceColor::Black => 0, // black promotes at y=0
+                } {
+                    self.promotion = true;
                 }
             }
 
@@ -227,19 +267,17 @@ impl Game {
                 (0, 0)
             };
 
-            // update bitmap and set own and other_color_bitmap for later checking for check
-            let (own_color_bitmap, other_color_bitmap) =  match piece.color {
+            // update bitmap
+            match piece.color {
                 PieceColor::White =>  {
                     self.white_bitmap &= !(piece.pos.to_bitmap() | castle_bitmap_remove); // turn off bit we moved from
                     self.white_bitmap |= pos_bitmap | castle_bitmap_add; // turn on bit we moved to
-                    (self.white_bitmap, self.black_bitmap)
                 },
                 PieceColor::Black => {
                     self.black_bitmap &= !(piece.pos.to_bitmap() | castle_bitmap_remove); // turn off bit we moved from
                     self.black_bitmap |= pos_bitmap | castle_bitmap_add; // turn on bit we moved to
-                    (self.black_bitmap, self.white_bitmap)
                 }
-            };
+            }
 
             // we remove the piece to change its key
             self.live_pieces.remove(&piece.pos);
@@ -248,7 +286,7 @@ impl Game {
             self.last_moved_from = piece.pos;
             self.last_moved_to = to;
 
-            // we change som data of piece
+            // we change some data of piece
             piece.pos = to;
             piece.has_moved = true;
 
@@ -257,57 +295,72 @@ impl Game {
             // cloning piece should be fine as it only contains primitive types
             self.live_pieces.insert(to, piece.clone());
             
-            // check for check
-            // get opponent king bitmap
-            let other_king_bitmap = match self.live_pieces.iter().find(|(_, x)| x.piece_type == PieceType::King && x.color != self.turn) {
-                Some((pos, _)) => pos.to_bitmap(),
-                None => 0, // no king
-            };
-            self.check = false; // reset check
-            for (_, this_turn_colored_pieces) in self.live_pieces.iter().filter(|(_, x)| { x.color == self.turn}) {
-                if self.psuedo_legal_moves(this_turn_colored_pieces, own_color_bitmap, other_color_bitmap) & other_king_bitmap != 0 {
-                    // the opponent is put in check
-                    self.check = true;
-                    break;
-                }
+            // check for check, game over, 50 move rule, and changes turn
+            if !self.promotion {
+                self.post_move();
             }
-
-            // 50 move rule, check mate will take precedence
-            if self.fifty_move_rule >= 100 {
-                self.result = ChessResult::Draw;
-            }
-
-            // change whos turn it is
-            self.turn = !self.turn;
-
-            // check for game finished
-            // the game is finished if there are no legal moves
-            // loop through all the pieces in the next turns color
-            let mut has_legal_moves = false;
-            for (_, next_turn_piece) in self.live_pieces.iter().filter(|(_, x)| { x.color == self.turn}) {
-                if self.legal_moves(next_turn_piece) != 0 {
-                    // there are legal moves
-                    has_legal_moves = true;
-                    break;
-                }
-            }
-            if has_legal_moves == false {
-                // the game is over!
-                // change result
-                self.result = if self.check {
-                    // check mate
-                    match self.turn {
-                        PieceColor::White => ChessResult::BlackWon,
-                        PieceColor::Black => ChessResult::WhiteWon,
-                    }
-                } else {
-                    // stale mate
-                    ChessResult::Draw
-                };
-            }
-
 
             Ok(())
+        }
+    }
+
+    // run when a move is finished
+    // checks for check, game over, 50 move rule, and changes turn
+    fn post_move(&mut self) {
+        // determine own and other_color_bitmap
+        let (own_color_bitmap, other_color_bitmap) = match self.turn {
+            PieceColor::White => (self.white_bitmap, self.black_bitmap),
+            PieceColor::Black => (self.black_bitmap, self.white_bitmap),
+        };
+
+        // check for check
+        // get opponent king bitmap
+        let other_king_bitmap = match self.live_pieces.iter().find(|(_, x)| x.piece_type == PieceType::King && x.color != self.turn) {
+            Some((pos, _)) => pos.to_bitmap(),
+            None => 0, // no king
+        };
+        self.check = false; // reset check
+        // loop through own pieces
+        for (_, this_turn_colored_pieces) in self.live_pieces.iter().filter(|(_, x)| { x.color == self.turn}) {
+            if self.psuedo_legal_moves(this_turn_colored_pieces, own_color_bitmap, other_color_bitmap) & other_king_bitmap != 0 {
+                // the opponent is put in check
+                self.check = true;
+                break;
+            }
+        }
+
+        // 50 move rule, check mate will take precedence
+        if self.fifty_move_rule >= 100 {
+            self.result = ChessResult::Draw;
+        }
+
+        // change whos turn it is
+        self.turn = !self.turn;
+
+        // check for game finished
+        // the game is finished if there are no legal moves
+        // loop through all the pieces in the next turns color
+        let mut has_legal_moves = false;
+        for (_, next_turn_piece) in self.live_pieces.iter().filter(|(_, x)| { x.color == self.turn}) {
+            if self.legal_moves(next_turn_piece) != 0 {
+                // there are legal moves
+                has_legal_moves = true;
+                break;
+            }
+        }
+        if has_legal_moves == false {
+            // the game is over!
+            // change result
+            self.result = if self.check {
+                // check mate
+                match self.turn {
+                    PieceColor::White => ChessResult::BlackWon,
+                    PieceColor::Black => ChessResult::WhiteWon,
+                }
+            } else {
+                // stale mate
+                ChessResult::Draw
+            };
         }
     }
 
@@ -712,12 +765,12 @@ fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
 // tests for all functions
 // perft?
 // 3 repeated states rule
-// pawn promotion
 // draw by insufficient material
 // chess notation for importing and testing games
 // exporting games
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
 // make it possible to call out draw if it is not automatic
+// function that retrieves a list of all captured pieces
 // and more!
 
 #[cfg(test)]
