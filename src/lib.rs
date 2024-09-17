@@ -16,6 +16,7 @@ use std::{collections::HashMap, ops::Not};
 pub struct Game {
     live_pieces: HashMap<Square, Piece>,
     fifty_move_rule: u32, // half-moves, reset upon pawn move or capture
+    state_history: HashMap<, u8>, // used for draw by repetition rule
     white_bitmap: u64,
     black_bitmap: u64,
 
@@ -324,7 +325,7 @@ impl Game {
     }
 
     // run when a move is finished
-    // checks for check, game over, 50 move rule, and changes turn
+    // checks for check, game over, 50 move rule, draw by repetition, and changes turn
     fn post_move(&mut self) {
         // determine own and other_color_bitmap
         let (own_color_bitmap, other_color_bitmap) = match self.turn {
@@ -352,6 +353,10 @@ impl Game {
         if self.fifty_move_rule >= 100 {
             self.result = ChessResult::Draw;
         }
+
+        // draw by repetition rule, check mate will take precedence
+
+
 
         // change whos turn it is
         self.turn = !self.turn;
@@ -780,10 +785,85 @@ fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
     bitmap
 }
 
+#[derive(Clone, Copy, PartialEq)]
+struct BoardValue {
+    white_bitmap: u64,
+    black_bitmap: u64,
+    king_bitmap: u64,
+    queen_bitmap: u64,
+    bishop_bitmap: u64,
+    knight_bitmap: u64,
+    rook_bitmap: u64,
+    pawn_bitmap: u64,
+    data: u8, // first bit is if en passant was possible, second = left (long) castle permission, third = right (short) castle permission, +4 for black
+}
+
+impl From<&Game> for BoardValue {
+    fn from(game: &Game) -> Self {
+        let mut white_bitmap = 0;
+        let mut black_bitmap = 0;
+        let mut king_bitmap = 0;
+        let mut queen_bitmap = 0;
+        let mut bishop_bitmap = 0;
+        let mut knight_bitmap = 0;
+        let mut rook_bitmap = 0;
+        let mut pawn_bitmap = 0;
+        let mut data = 0;
+
+        let live_pieces = game.get_board_state();
+        let enPassant = live_pieces.get(&game.last_moved_to)
+
+        for (square, piece) in live_pieces {
+            match piece.color {
+                PieceColor::White => white_bitmap |= square.to_bitmap(),
+                PieceColor::Black => black_bitmap |= square.to_bitmap(),
+            }
+
+            match piece.piece_type {
+                PieceType::King => king_bitmap |= square.to_bitmap(),
+                PieceType::Queen => queen_bitmap |= square.to_bitmap(),
+                PieceType::Bishop => bishop_bitmap |= square.to_bitmap(),
+                PieceType::Knight => knight_bitmap |= square.to_bitmap(),
+                PieceType::Rook => rook_bitmap |= square.to_bitmap(),
+                PieceType::Pawn => pawn_bitmap |= square.to_bitmap(),
+            }
+
+            let color_bitshift: u8 = match piece.color {
+                PieceColor::White => 0,
+                PieceColor::Black => 4,
+            };
+
+            if piece.piece_type == PieceType::King && !piece.has_moved {
+                data |= 0b0110 << color_bitshift;
+
+                // left castle
+                if match live_pieces.get(&Square::from((0, square.y))) { // if has moved
+                    Some(rook) => rook.piece_type != PieceType::Rook || rook.has_moved,
+                    None => true,
+                } {
+                    data &= ! 0b0010 << color_bitshift;
+                }
+
+                // right castle
+                if match live_pieces.get(&Square::from((7, square.y))) { // if has moved
+                    Some(rook) => rook.piece_type != PieceType::Rook || rook.has_moved,
+                    None => true,
+                } {
+                    data &= ! 0b0100 << color_bitshift;
+                }
+            }
+
+
+        }
+
+        Self { white_bitmap, black_bitmap, king_bitmap, queen_bitmap, bishop_bitmap, knight_bitmap, rook_bitmap, pawn_bitmap, data }
+    }
+}
+
 // TODO
+// 3 repeated states rule
 // tests for all functions
 // perft?
-// 3 repeated states rule
 // draw by insufficient material
 // chess notation for importing and testing games
 // exporting games
