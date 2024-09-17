@@ -93,7 +93,7 @@ impl Game {
         let black_captured_pieces = Vec::new();
         let mut this = Self {live_pieces, turn, result, fifty_move_rule, previous_states, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion, white_captured_pieces, black_captured_pieces};
         this.previous_states.insert(BoardValue::from(&this), 1);
-        
+
         this
     }
 
@@ -187,6 +187,13 @@ impl Game {
         }
     }
 
+    // ends the game in a draw, only works if game is ongoing
+    pub fn declare_draw(&mut self) {
+        if self.result == ChessResult::Ongoing {
+            self.result = ChessResult::Draw;
+        }
+    }
+
     // removes any piece in the square and updates bitmaps
     fn capture(&mut self, square: &Square) {
 
@@ -197,6 +204,9 @@ impl Game {
                     PieceColor::White => self.white_captured_pieces.push(piece.piece_type),
                     PieceColor::Black => self.black_captured_pieces.push(piece.piece_type),
                 }
+
+                // reset previous_states because it cant happen again after a capture
+                self.previous_states.clear();
             },
             None => (),
         }
@@ -329,7 +339,7 @@ impl Game {
     }
 
     // run when a move is finished
-    // checks for check, game over, 50 move rule, draw by repetition, and changes turn
+    // checks for check, game over, 50 move rule, draw by repetition, draw by insufficient material and changes turn
     fn post_move(&mut self) {
         // determine own and other_color_bitmap
         let (own_color_bitmap, other_color_bitmap) = match self.turn {
@@ -368,6 +378,23 @@ impl Game {
                 }
             },
             None => _ = self.previous_states.insert(board_value, 1),
+        }
+
+        // draw by insufficient material
+        if self.live_pieces.len() <= 3 {
+            let mut do_draw = true;
+            for (square, piece) in &self.live_pieces {
+                match piece.piece_type {
+                    PieceType::King => continue,
+                    PieceType::Bishop => continue,
+                    PieceType::Knight => continue,
+                    PieceType::Rook => continue,
+                    _ => { do_draw = false; break; },
+                }
+            }
+            if do_draw {
+                self.result = ChessResult::Draw;
+            }
         }
 
         // change whos turn it is
@@ -888,11 +915,12 @@ impl From<&Game> for BoardValue {
 }
 
 // TODO
-// 3 repeated states rule
-// tests for all functions
-// perft?
+// timer
+// write read me
 // draw by insufficient material
+// tests for all functions
 // chess notation for importing and testing games
+// perft?
 // exporting games
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
 // make it possible to call out draw if it is not automatic
