@@ -811,7 +811,7 @@ impl From<&Game> for BoardValue {
         let mut data = 0;
 
         let live_pieces = game.get_board_state();
-        let enPassant = live_pieces.get(&game.last_moved_to)
+        //let enPassant = live_pieces.get(&game.last_moved_to)
 
         for (square, piece) in live_pieces {
             match piece.color {
