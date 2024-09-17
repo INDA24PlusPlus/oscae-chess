@@ -383,7 +383,7 @@ impl Game {
         // draw by insufficient material
         if self.live_pieces.len() <= 3 {
             let mut do_draw = true;
-            for (square, piece) in &self.live_pieces {
+            for (_, piece) in &self.live_pieces {
                 match piece.piece_type {
                     PieceType::King => continue,
                     PieceType::Bishop => continue,
