@@ -16,7 +16,7 @@ use std::{collections::HashMap, ops::Not};
 pub struct Game {
     live_pieces: HashMap<Square, Piece>,
     fifty_move_rule: u32, // half-moves, reset upon pawn move or capture
-    state_history: HashMap<, u8>, // used for draw by repetition rule
+    previous_states: HashMap<BoardValue, u8>, // used for draw by repetition rule, stores count in value
     white_bitmap: u64,
     black_bitmap: u64,
 
@@ -80,6 +80,7 @@ impl Game {
         let turn = PieceColor::White;
         let result = ChessResult::Ongoing;
         let fifty_move_rule = 0;
+        let previous_states = HashMap::new();
 
         let white_bitmap = 0b00000000_00000000_00000000_00000000_00000000_00000000_11111111_11111111;
         let black_bitmap = 0b11111111_11111111_00000000_00000000_00000000_00000000_00000000_00000000;
@@ -90,7 +91,10 @@ impl Game {
         let promotion = false;
         let white_captured_pieces = Vec::new();
         let black_captured_pieces = Vec::new();
-        Self {live_pieces, turn, result, fifty_move_rule, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion, white_captured_pieces, black_captured_pieces}
+        let mut this = Self {live_pieces, turn, result, fifty_move_rule, previous_states, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion, white_captured_pieces, black_captured_pieces};
+        this.previous_states.insert(BoardValue::from(&this), 1);
+        
+        this
     }
 
     // returns a reference to the hashmap of live pieces
@@ -355,8 +359,16 @@ impl Game {
         }
 
         // draw by repetition rule, check mate will take precedence
-
-
+        let board_value = BoardValue::from(&*self);
+        match self.previous_states.get_mut(&board_value) {
+            Some(val) => {
+                *val += 1;
+                if *val >= 3 {
+                    self.result = ChessResult::Draw;
+                }
+            },
+            None => _ = self.previous_states.insert(board_value, 1),
+        }
 
         // change whos turn it is
         self.turn = !self.turn;
@@ -785,7 +797,7 @@ fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
     bitmap
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct BoardValue {
     white_bitmap: u64,
     black_bitmap: u64,
@@ -811,7 +823,16 @@ impl From<&Game> for BoardValue {
         let mut data = 0;
 
         let live_pieces = game.get_board_state();
-        //let enPassant = live_pieces.get(&game.last_moved_to)
+        let en_passant_x = match live_pieces.get(&game.last_moved_to) {
+            Some(pawn) => {
+                if pawn.piece_type == PieceType::Pawn && game.last_moved_from.y + pawn.get_direction() * 2 == game.last_moved_to.y {
+                    game.last_moved_to.x
+                } else {
+                    -8
+                }
+            },
+            None => -8,
+        };
 
         for (square, piece) in live_pieces {
             match piece.color {
@@ -841,7 +862,7 @@ impl From<&Game> for BoardValue {
                     Some(rook) => rook.piece_type != PieceType::Rook || rook.has_moved,
                     None => true,
                 } {
-                    data &= ! 0b0010 << color_bitshift;
+                    data &= !(0b0010 << color_bitshift);
                 }
 
                 // right castle
@@ -849,11 +870,17 @@ impl From<&Game> for BoardValue {
                     Some(rook) => rook.piece_type != PieceType::Rook || rook.has_moved,
                     None => true,
                 } {
-                    data &= ! 0b0100 << color_bitshift;
+                    data &= !(0b0100 << color_bitshift);
+                }
+            } else if piece.piece_type == PieceType::Pawn && piece.pos.y == match piece.color {
+                PieceColor::White => 4,
+                PieceColor::Black => 3,
+            } {
+                // en passant
+                if en_passant_x == piece.pos.x - 1 || en_passant_x == piece.pos.x + 1 {
+                    data |= 0b0001 << color_bitshift;
                 }
             }
-
-
         }
 
         Self { white_bitmap, black_bitmap, king_bitmap, queen_bitmap, bishop_bitmap, knight_bitmap, rook_bitmap, pawn_bitmap, data }
