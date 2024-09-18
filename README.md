@@ -144,5 +144,6 @@ PieceColor is copied by default and can have the following values:
 
 PieceColor also implemets Not such that `!PieceColor::White == PieceColor::Black` and vice versa
 
+## ChessResult
 ChessResult is copied by default and can have the following values:
 `Ongoing`, `WhiteWon`, `BlackWon`, `Draw`
