@@ -691,7 +691,7 @@ impl From<(i8, i8)> for Square {
 
 impl From<&str> for Square {
     // initialize from a two values of i8, i8
-    fn from(pos: &str) -> Square {
+    fn from(pos: &str) -> Self {
         let mut pos = pos.trim().chars();
         let x: i8 = match pos.next(){
             Some(c) => {
