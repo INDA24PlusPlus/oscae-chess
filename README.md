@@ -146,3 +146,6 @@ PieceColor also implemets Not such that `!PieceColor::White == PieceColor::Black
 ## ChessResult
 ChessResult is copied by default and can have the following values:
 `Ongoing`, `WhiteWon`, `BlackWon`, `Draw`
+
+# Board index reference
+![ChessBoardIndex](https://github.com/user-attachments/assets/2b826e80-896c-4cf1-a95e-a2023cc31dc1)
