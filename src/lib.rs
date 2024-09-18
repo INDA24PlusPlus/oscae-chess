@@ -272,7 +272,7 @@ impl Game {
 
             // castle
             let (castle_bitmap_add, castle_bitmap_remove) = if piece.piece_type == PieceType::King && !piece.has_moved {
-                if piece.pos.moved(-2, 0) == to {
+                if piece.pos.moved(-2, 0) == to { // long castle
                     match self.live_pieces.get(&Square::from((0,piece.pos.y))) {
                         Some(rook) => {
                             let mut rook = rook.clone();
@@ -288,14 +288,14 @@ impl Game {
                         },
                         None => (0, 0),
                     }
-                } else if piece.pos.moved(2, 0) == to {
-                    match self.live_pieces.get(&Square::from((0,piece.pos.y))) {
+                } else if piece.pos.moved(2, 0) == to { // short castle
+                    match self.live_pieces.get(&Square::from((7, piece.pos.y))) {
                         Some(rook) => {
                             let mut rook = rook.clone();
                             self.live_pieces.remove(&rook.pos);
                             rook.has_moved = true;
                             let castle_bitmap_remove = rook.pos.to_bitmap();
-                            rook.pos = to.moved(1, 0);
+                            rook.pos = to.moved(-1, 0);
                             let castle_bitmap_add = rook.pos.to_bitmap();
                             self.live_pieces.insert(rook.pos, rook);
 
