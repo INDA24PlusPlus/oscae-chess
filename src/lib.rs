@@ -785,7 +785,6 @@ impl Not for PieceColor {
             PieceColor::Black => PieceColor::White,
         }
     }
-    
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -924,11 +923,9 @@ impl From<&Game> for BoardValue {
 }
 
 // TODO
-// timer
-// write read me
 // tests for all functions
+// timer
 // chess notation for importing and testing games
-// perft?
 // exporting games
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
 // make it possible to call out draw if it is not automatic
@@ -937,6 +934,82 @@ impl From<&Game> for BoardValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_game() {
+        let mut game = Game::new();
+        assert!(game.turn == PieceColor::White);
+        assert!(game.do_move(&Square::from("E2"), &Square::from("E4")) == true); // (white) pawn opening
+        assert!(game.turn == PieceColor::Black);
+        assert!(game.do_move(&Square::from("D7"), &Square::from("D5")) == true); // (black) queen side pawn
+
+        assert!(game.do_move(&Square::from("E4"), &Square::from("D5")) == true); // (white) take pawn
+        assert!(game.capture == true);
+        assert!(game.do_move(&Square::from("C8"), &Square::from("E6")) == true); // (black) move bishop
+        
+        assert!(game.do_move(&Square::from("D1"), &Square::from("F3")) == true); // (white) move queen
+        assert!(game.do_move(&Square::from("B8"), &Square::from("D7")) == true); // (black) move knight
+        
+        assert!(game.do_move(&Square::from("D5"), &Square::from("E6")) == true); // (white) take bishop with pawn
+        assert!(game.capture == true);
+        assert!(game.do_move(&Square::from("A7"), &Square::from("A5")) == true); // (black) move A-pawn
+        assert!(game.capture == false);
+        
+        assert!(game.do_move(&Square::from("A2"), &Square::from("A3")) == true); // (white) move A-pawn
+        assert!(game.do_move(&Square::from("A5"), &Square::from("A4")) == true); // (black) move A-pawn
+        
+        assert!(game.do_move(&Square::from("B2"), &Square::from("B4")) == true); // (white) move B-pawn
+        assert!(game.do_move(&Square::from("A4"), &Square::from("A3")) == false); // (black) cant move forward
+        assert!(game.do_move(&Square::from("A4"), &Square::from("B3")) == true); // (black) en passant
+        assert!(game.capture == true);
+        
+        assert!(game.do_move(&Square::from("F3"), &Square::from("F7")) == true); // (white) move queen to mate
+        assert!(game.result == ChessResult::WhiteWon);
+    }
+
+    #[test]
+    fn test_piece() {
+        let piece1 = Piece { piece_type: PieceType::Knight, color: PieceColor::White, pos: Square::from((0,3)), has_moved: false };
+        let piece2 = Piece { piece_type: PieceType::Bishop, color: PieceColor::Black, pos: Square::from((3,0)), has_moved: false };
+        
+        assert!(piece1.get_direction() == 1);
+        assert!(piece2.get_direction() == -1);
+    }
+
+    #[test]
+    fn test_square() { // and bitmap_line()
+        let square0 = Square {x: 3, y: 0};
+        let square1 = Square::from(46); // (6, 5)
+        let square2 = Square::from((4, 5));
+        let square3 = Square::from("B3");
+        
+        assert!(square0.x == 3);
+        assert!(square0.y == 0);
+
+        assert!(square1.x == 6);
+        assert!(square1.y == 5);
+
+        assert!(square2.x == 4);
+        assert!(square2.y == 5);
+
+        assert!(square3.x == 1);
+        assert!(square3.y == 2);
+
+        let square4 = square3.moved(1, 2);
+        assert!(square4.x == 2);
+        assert!(square4.y == 4);
+
+        assert!(square0.to_bitmap() == 0b00001000);
+
+        assert!(square1.to_index() == 46);
+        assert!(square2.to_tuple() == (4,5));
+        assert!(square3.to_notation() == "B3");
+
+        assert!(bitmap_line(square0,  1, 0, 0, 0) == 0b11110000);
+        assert!(bitmap_line(square0, -1, 0, 0, 0) == 0b00000111);
+        assert!(bitmap_line(square0, -1, 0, 0b10, 0) == 0b00000100);
+        assert!(bitmap_line(square0, -1, 0, 0, 0b10) == 0b00000110);
+    }
 
     #[test]
     fn test_color() {
@@ -950,16 +1023,6 @@ mod tests {
         assert!(col1 != col3);
         assert!(col4 != col2);
         assert!(!(col1 != col2));
-    }
-
-    #[test]
-    fn test_notation() {
-        let square = Square::from((4, 5));
-        assert!(square.x == 4);
-        assert!(square.y == 5);
-
-        
-        assert!(square.y == 5);
     }
 
     // Regression tests: se till att inte buggar återuppstår
