@@ -125,7 +125,7 @@ Each contructor has a corresponding function that does the opposite.
 Returns an index corresponding to the square where **A1** returns `0`, **B1** returns `1` and **H8** returns `63`.
 
 `to_tuple(&self) -> (i8, i8)`
-Returns a tuple `(x: i8, y: i8)` such that x and y ranges from `0-7`
+Returns a tuple `(x: i8, y: i8)` such that x and y ranges from `0-7`.
 
 `to_notation(&self) -> String`
 Returns a String that represents the square in chess coordinates such as `A1`, `B1` or `H8`.
@@ -133,7 +133,6 @@ Returns a String that represents the square in chess coordinates such as `A1`, `
 # Enums
 This section explains the public enums that are used in the API.
 
-#[derive(Clone, Copy, PartialEq)]
 ## PieceType
 PieceType is copied by default and can have the following values:
 `King`, `Queen`, `Bishop`, `Knight`, `Rook`, `Pawn`
@@ -142,7 +141,7 @@ PieceType is copied by default and can have the following values:
 PieceColor is copied by default and can have the following values:
 `White`, `Black`
 
-PieceColor also implemets Not such that `!PieceColor::White == PieceColor::Black` and vice versa
+PieceColor also implemets Not such that `!PieceColor::White == PieceColor::Black` and vice versa.
 
 ## ChessResult
 ChessResult is copied by default and can have the following values:
