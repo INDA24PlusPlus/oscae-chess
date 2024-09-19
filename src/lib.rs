@@ -1218,10 +1218,9 @@ impl From<&Game> for BoardValue {
 }
 
 // TODO
-// tests for all functions
+// PNG (portable chess notation)
+// more tests
 // timer
-// chess notation for importing and testing games
-// exporting games
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
 // make it possible to call out draw if it is not automatic
 // and more!
