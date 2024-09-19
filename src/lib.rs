@@ -44,9 +44,13 @@ pub struct Game {
     pub white_captured_pieces : Vec<PieceType>,
     // black pieces that was captured
     pub black_captured_pieces : Vec<PieceType>,
+
+    // starts at 1 and is incremented when black moves
+    pub fullmoves: u32,
 }
 
 impl Game {
+    // creates a new chess instance with the initial starting positions of chess
     pub fn new() -> Self {
         let mut live_pieces = HashMap::new();
 
@@ -91,10 +95,148 @@ impl Game {
         let promotion = false;
         let white_captured_pieces = Vec::new();
         let black_captured_pieces = Vec::new();
-        let mut this = Self {live_pieces, turn, result, fifty_move_rule, previous_states, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion, white_captured_pieces, black_captured_pieces};
-        this.previous_states.insert(BoardValue::from(&this), 1);
+        let fullmoves = 1;
+        let mut game = Self {live_pieces, turn, result, fifty_move_rule, previous_states, white_bitmap, black_bitmap, last_moved_from, last_moved_to, capture, check, promotion, white_captured_pieces, black_captured_pieces, fullmoves};
+        game.previous_states.insert(BoardValue::from(&game), 1);
 
-        this
+        game
+    }
+
+    // creates a chess instance from FEN
+    pub fn from_fen(fen: &String) -> Self {
+        let mut game = Game::new();
+
+        let fields: Vec<&str> = fen.trim().split_whitespace().collect();
+        
+        // 1 pieces
+        if fields.len() < 1 { return game; }
+        
+        game.live_pieces.clear();
+
+        let template = Piece { piece_type: PieceType::Pawn, color: PieceColor::White, pos: Square {x: -1, y: -1}, has_moved: true};
+
+        let mut x = 0;
+        let mut y = 7;
+
+        for c in fields[0].chars() {
+            let mut piece_type = PieceType::Pawn;
+            let color = if c.to_ascii_lowercase() == c {
+                PieceColor::Black
+            } else {
+                PieceColor::White
+            };
+
+            let mut has_moved = true;
+
+            match c.to_ascii_uppercase() {
+                '/' => { y -= 1; x = 0; continue; },
+                'K' => { piece_type = PieceType::King; has_moved = false },
+                'Q' => piece_type = PieceType::Queen,
+                'B' => piece_type = PieceType::Bishop,
+                'N' => piece_type = PieceType::Knight,
+                'R' => piece_type = PieceType::Rook,
+                'P' => piece_type = {
+                    if match color {
+                        PieceColor::White => 1,
+                        PieceColor::Black => 6,
+                    } == y {
+                       has_moved = false; 
+                    }
+                    PieceType::Pawn
+                },
+                _ => {
+                    match c.to_string().parse::<i8>() {
+                        Ok(i) => {
+                            x += i;
+                            continue;
+                        },
+                        Err(_) => (),
+                    }
+                },
+            }
+            game.live_pieces.insert(Square {x, y}, Piece { piece_type, color, pos: Square {x, y}, has_moved, ..template });
+            
+            x += 1;
+        }
+
+        // 2 turn
+        if fields.len() < 2 { return game; }
+
+        game.turn = match fields[1] { // post_move() will change turn later
+            "b" => PieceColor::White,
+            _ => PieceColor::Black,
+        };
+
+        // 3 castling rights
+        if fields.len() < 3 { return game; }
+
+        if fields[2].contains("Q") {
+            match game.live_pieces.get_mut(&Square::from((0, 0))) {
+                Some(rook) => rook.has_moved = false,
+                None => (),
+            }
+        }
+
+        if fields[2].contains("K") {
+            match game.live_pieces.get_mut(&Square::from((7, 0))) {
+                Some(rook) => rook.has_moved = false,
+                None => (),
+            }
+        }
+
+        if fields[2].contains("q") {
+            match game.live_pieces.get_mut(&Square::from((0, 7))) {
+                Some(rook) => rook.has_moved = false,
+                None => (),
+            }
+        }
+
+        if fields[2].contains("k") {
+            match game.live_pieces.get_mut(&Square::from((7, 7))) {
+                Some(rook) => rook.has_moved = false,
+                None => (),
+            }
+        }
+
+        // 4 possible en passant target
+        if fields.len() < 4 { return game; }
+
+        if fields[3] != "-"
+        {
+            game.last_moved_to = Square::from(fields[3]);
+            game.last_moved_from = game.last_moved_to.moved(0, match game.turn {
+                PieceColor::White => 2,
+                PieceColor::Black => -2,
+            });
+        }
+
+        // 5 halfmove clock
+        if fields.len() < 5 { return game; }
+
+        match fields[4].parse() {
+            Ok(i) => game.fifty_move_rule = i,
+            Err(_) => (),
+        }
+
+        // 6 fullmove number
+        if fields.len() < 6 { return game; }
+
+        match fields[5].parse::<u32>() {
+            Ok(i) => game.fullmoves = i,
+            Err(_) => (),
+        }
+
+        if game.turn == PieceColor::Black && game.fullmoves > 0 {
+            game.fullmoves -= 1;
+        }
+
+        // bitmaps
+        game.white_bitmap = _make_color_bitmap(&game.live_pieces, PieceColor::White);
+        game.black_bitmap = _make_color_bitmap(&game.live_pieces, PieceColor::Black);
+        
+        game.post_move();
+
+        game
     }
 
     // returns a reference to the hashmap of live pieces
@@ -202,6 +344,155 @@ impl Game {
                 PieceColor::Black => ChessResult::BlackWon,
             };
         }
+    }
+
+    // returns a FEN string of the current game
+    pub fn to_fen(&self) -> String {
+        let mut fen = String::new();
+
+        // 1 pieces
+        let mut y = 7;
+        while y >= 0 {
+            let mut empty_spaces = 0;
+            for x in 0..8 {
+                match self.live_pieces.get(&Square::from((x, y))) {
+                    Some(piece) => {
+                        if empty_spaces > 0 {
+                            fen.push_str(empty_spaces.to_string().as_str());
+                            empty_spaces = 0;
+                        }
+
+                        let mut c = match piece.piece_type {
+                            PieceType::King => 'K',
+                            PieceType::Queen => 'Q',
+                            PieceType::Bishop => 'B',
+                            PieceType::Knight => 'N',
+                            PieceType::Rook => 'R',
+                            PieceType::Pawn => 'P',
+                        };
+
+                        if piece.color == PieceColor::Black {
+                            c = c.to_ascii_lowercase();
+                        }
+
+                        fen.push(c);
+                    },
+                    None => empty_spaces += 1,
+                }
+            }
+
+            if empty_spaces > 0 {
+                fen.push_str(empty_spaces.to_string().as_str());
+            }
+
+            if y == 0 {
+                break;
+            }
+            
+            fen.push('/');
+            y -= 1;
+        }
+
+        // 2 turn
+        fen.push_str(match self.turn {
+            PieceColor::White => " w ",
+            PieceColor::Black => " b ",
+        });
+
+        // 3 castling rights
+        let mut any_castling_rights = false;
+
+        // white
+        match self.live_pieces.get(&Square::from((4, 0))) {
+            // white king
+            Some(king) => {
+                if king.piece_type == PieceType::King && king.has_moved == false {
+                    match self.live_pieces.get(&Square::from((7, 0))) {
+                        // white king rook
+                        Some(rook) => {
+                            if rook.piece_type == PieceType::Rook && rook.has_moved == false {
+                                any_castling_rights = true;
+                                fen.push('K');
+                            }
+                        },
+                        None => (),
+                    }
+
+                    match self.live_pieces.get(&Square::from((0, 0))) {
+                        // white queen rook
+                        Some(rook) => {
+                            if rook.piece_type == PieceType::Rook && rook.has_moved == false {
+                                any_castling_rights = true;
+                                fen.push('Q');
+                            }
+                        },
+                        None => (),
+                    }
+                }
+            },
+            None => (),
+        }
+
+        // black
+        match self.live_pieces.get(&Square::from((4, 7))) {
+            // black king
+            Some(king) => {
+                if king.piece_type == PieceType::King && king.has_moved == false {
+                    match self.live_pieces.get(&Square::from((7, 7))) {
+                        // black king rook
+                        Some(rook) => {
+                            if rook.piece_type == PieceType::Rook && rook.has_moved == false {
+                                any_castling_rights = true;
+                                fen.push('k');
+                            }
+                        },
+                        None => (),
+                    }
+
+                    match self.live_pieces.get(&Square::from((0, 7))) {
+                        // black queen rook
+                        Some(rook) => {
+                            if rook.piece_type == PieceType::Rook && rook.has_moved == false {
+                                any_castling_rights = true;
+                                fen.push('q');
+                            }
+                        },
+                        None => (),
+                    }
+                }
+            },
+            None => (),
+        }
+
+        if any_castling_rights {
+            fen.push(' ');
+        }
+        else {
+            fen.push_str("- ");
+        }
+
+        // 4 possible en passant targets
+        match self.live_pieces.get(&self.last_moved_to) {
+            Some(pawn) => {
+                if pawn.piece_type == PieceType::Pawn && self.last_moved_from.moved(0, pawn.get_direction() * 2) == self.last_moved_to {
+                    fen.push_str(self.last_moved_to.to_notation().to_ascii_lowercase().as_str());
+                    fen.push(' ');
+                }
+                else {
+                    fen.push_str("- ");
+                }
+            },
+            None => fen.push_str("- "),
+        }
+
+        // 5 halfmove clock
+        fen.push_str(self.fifty_move_rule.to_string().as_str());
+        fen.push(' ');
+        
+        // 6 fullmove number
+        fen.push_str(self.fullmoves.to_string().as_str());
+
+        fen
     }
 
     // removes any piece in the square and updates bitmaps
@@ -406,7 +697,12 @@ impl Game {
             }
         }
 
-        // change whos turn it is
+        // increment fullmoves
+        if self.turn == PieceColor::Black {
+            self.fullmoves += 1;
+        }
+        
+        // change whos turn it
         self.turn = !self.turn;
 
         // check for game finished
@@ -690,7 +986,7 @@ impl From<(i8, i8)> for Square {
 }
 
 impl From<&str> for Square {
-    // initialize from a two values of i8, i8
+    // initialize from algebraic notation
     fn from(pos: &str) -> Self {
         let mut pos = pos.trim().chars();
         let x: i8 = match pos.next(){
@@ -819,15 +1115,14 @@ fn _print_bitmap(bitmap: u64) {
     
 }
 
-fn _make_color_bitmap(game: Game, color: PieceColor) -> u64 {
+fn _make_color_bitmap(live_pieces: &HashMap<Square, Piece>, color: PieceColor) -> u64 {
     let mut bitmap = 0;
-    for piece in game.live_pieces.values() {
+    for (_, piece) in live_pieces {
         if piece.color != color {
             continue;
         }
 
         bitmap |= piece.pos.to_bitmap();
-
     }
     bitmap
 }

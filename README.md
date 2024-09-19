@@ -30,6 +30,10 @@ You may use `game.last_moved_from` and `game.last_moved_to` to highlight the squ
 
 `game.capture` and `game.check` can be used for effects when a piece is captured or when the king is in check. Such as a different move sound.
 
+`game.fullmoves` can be used to display move count.
+
+You can import and export game states using FEN with `Game::from_fen()` and `game.to_fen()`.
+
 # The Game struct
 ## Variables
 `turn: PieceColor`
@@ -59,9 +63,18 @@ A list of white pieces that have been captured. In order of capture, first to la
 `black_captured_pieces : Vec<PieceType>`
 A list of black pieces that have been captured. In order of capture, first to last.
 
+`game.fullmoves`
+An integer that starts at 1 and incremets every time black moves.
+
 ## Functions
 `new() -> Self`
 Creates and returns a new instance of `Game`.
+
+`from_fen(&String) -> Self`
+Creates and returns a new instance of `Game` from a FEN string.
+
+`to_fen(&self) -> String`
+Returns the current game state as a FEN string.
 
 `get_board_state(&self) -> &HashMap<Square, Piece>`
 Returns an immutable reference to the HashMap of Squares and Pieces.
