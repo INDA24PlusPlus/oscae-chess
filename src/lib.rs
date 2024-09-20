@@ -238,114 +238,7 @@ impl Game {
 
         game
     }
-
-    // returns a reference to the hashmap of live pieces
-    pub fn get_board_state(&self) -> &HashMap<Square, Piece> {
-        &self.live_pieces
-    }
-
-    // returns a vec of Square, of all legal moves that can be made from the square "from" considering turn
-    pub fn get_moves_list(&self, from : &Square) -> Vec<Square> {
-        match self.live_pieces.get(from) {
-            Some(piece) => {
-                let mut moves = Vec::new();
-                if piece.color != self.turn {
-                    return moves;
-                }
-
-                let moves_bitmap = self.legal_moves(piece);
-                for i in 0..64 {
-                    if (moves_bitmap >> i) & 1 != 0 {
-                        moves.push(Square::from(i));
-                    }
-                }
-                moves
-            },
-            None => return Vec::new(),
-        }
-    }
-
-    // returns a bitmap of all legal moves that can be made from the square "from" considering turn
-    pub fn get_moves_bitmap(&self, from: &Square) -> u64 {
-        match self.live_pieces.get(from) {
-            Some(piece) => {
-                if piece.color == self.turn {
-                    self.legal_moves(piece)
-                } else {
-                    0
-                }
-            },
-            None => 0,
-        }
-    }
-
-    // does a move and returns true if it was successful
-    pub fn do_move(&mut self, from: &Square, to: &Square) -> bool {
-
-        // get piece at "from"
-        let mut piece = match self.live_pieces.get(from) {
-            Some(p) => p.clone(),
-            None => return false,
-        };
-
-        // return false if it is not this piece's turn
-        if piece.color != self.turn {
-            return false;
-        }
-
-        // return false if a promotion has to be done using pawn_promotion()
-        if self.promotion {
-            return false;
-        }
-
-        if self.legal_moves(&piece) & to.to_bitmap() != 0 {
-            // legal move
-            match self.force_move(&mut piece, *to) {
-                Ok(_) => true,
-                Err(_) => false,
-            }
-        } else {
-            // illegal move
-            false
-        }
-    }
-
-    // selects the piece to promote a pawn to. will return false if invalid PieceType whas passed
-    pub fn pawn_promotion(&mut self, class: PieceType) -> bool {
-        // return false if class is king or pawn
-        if class == PieceType::King || class == PieceType::Pawn || !self.promotion {
-            return false;
-        }
-
-        // do promotion and finish move with post_move()
-        match self.live_pieces.get_mut(&self.last_moved_to) {
-            Some(piece) => {
-                piece.piece_type = class;
-                self.promotion = false;
-                self.post_move();
-                true
-            },
-            None => false,
-        }
-    }
-
-    // ends the game in a draw, only works if game is ongoing
-    pub fn declare_draw(&mut self) {
-        if self.result == ChessResult::Ongoing {
-            self.result = ChessResult::Draw;
-        }
-    }
-
-    // ends the game immediatly and declares a winner
-    pub fn declare_win(&mut self, color: PieceColor) {
-        if self.result == ChessResult::Ongoing {
-            self.result = match color {
-                PieceColor::White => ChessResult::WhiteWon,
-                PieceColor::Black => ChessResult::BlackWon,
-            };
-        }
-    }
-
+    
     // returns a FEN string of the current game
     pub fn to_fen(&self) -> String {
         let mut fen = String::new();
@@ -515,6 +408,113 @@ impl Game {
         // update bitmaps
         self.white_bitmap &= !square.to_bitmap(); 
         self.black_bitmap &= !square.to_bitmap(); 
+    }
+
+    // returns a reference to the hashmap of live pieces
+    pub fn get_board_state(&self) -> &HashMap<Square, Piece> {
+        &self.live_pieces
+    }
+
+    // returns a vec of Square, of all legal moves that can be made from the square "from" considering turn
+    pub fn get_moves_list(&self, from : &Square) -> Vec<Square> {
+        match self.live_pieces.get(from) {
+            Some(piece) => {
+                let mut moves = Vec::new();
+                if piece.color != self.turn {
+                    return moves;
+                }
+
+                let moves_bitmap = self.legal_moves(piece);
+                for i in 0..64 {
+                    if (moves_bitmap >> i) & 1 != 0 {
+                        moves.push(Square::from(i));
+                    }
+                }
+                moves
+            },
+            None => return Vec::new(),
+        }
+    }
+
+    // returns a bitmap of all legal moves that can be made from the square "from" considering turn
+    pub fn get_moves_bitmap(&self, from: &Square) -> u64 {
+        match self.live_pieces.get(from) {
+            Some(piece) => {
+                if piece.color == self.turn {
+                    self.legal_moves(piece)
+                } else {
+                    0
+                }
+            },
+            None => 0,
+        }
+    }
+
+    // does a move and returns true if it was successful
+    pub fn do_move(&mut self, from: &Square, to: &Square) -> bool {
+
+        // get piece at "from"
+        let mut piece = match self.live_pieces.get(from) {
+            Some(p) => p.clone(),
+            None => return false,
+        };
+
+        // return false if it is not this piece's turn
+        if piece.color != self.turn {
+            return false;
+        }
+
+        // return false if a promotion has to be done using pawn_promotion()
+        if self.promotion {
+            return false;
+        }
+
+        if self.legal_moves(&piece) & to.to_bitmap() != 0 {
+            // legal move
+            match self.force_move(&mut piece, *to) {
+                Ok(_) => true,
+                Err(_) => false,
+            }
+        } else {
+            // illegal move
+            false
+        }
+    }
+
+    // selects the piece to promote a pawn to. will return false if invalid PieceType whas passed
+    pub fn pawn_promotion(&mut self, class: PieceType) -> bool {
+        // return false if class is king or pawn
+        if class == PieceType::King || class == PieceType::Pawn || !self.promotion {
+            return false;
+        }
+
+        // do promotion and finish move with post_move()
+        match self.live_pieces.get_mut(&self.last_moved_to) {
+            Some(piece) => {
+                piece.piece_type = class;
+                self.promotion = false;
+                self.post_move();
+                true
+            },
+            None => false,
+        }
+    }
+
+    // ends the game in a draw, only works if game is ongoing
+    pub fn declare_draw(&mut self) {
+        if self.result == ChessResult::Ongoing {
+            self.result = ChessResult::Draw;
+        }
+    }
+
+    // ends the game immediatly and declares a winner
+    pub fn declare_win(&mut self, color: PieceColor) {
+        if self.result == ChessResult::Ongoing {
+            self.result = match color {
+                PieceColor::White => ChessResult::WhiteWon,
+                PieceColor::Black => ChessResult::BlackWon,
+            };
+        }
     }
 
     // moves the piece and takes whatever is in the way, does not do any checks
@@ -986,7 +986,7 @@ impl From<(i8, i8)> for Square {
 }
 
 impl From<&str> for Square {
-    // initialize from algebraic notation
+    // initialize from letter-number notation
     fn from(pos: &str) -> Self {
         let mut pos = pos.trim().chars();
         let x: i8 = match pos.next(){
@@ -1218,7 +1218,7 @@ impl From<&Game> for BoardValue {
 }
 
 // TODO
-// PNG (portable chess notation)
+// PGN (portable game notation)
 // more tests
 // timer
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
@@ -1259,6 +1259,17 @@ mod tests {
         
         assert!(game.do_move(&Square::from("F3"), &Square::from("F7")) == true); // (white) move queen to mate
         assert!(game.result == ChessResult::WhiteWon);
+    }
+
+    #[test]
+    fn test_fen() {
+        let fen = "8/5k2/3p4/1p1Pp2p/pP2Pp1P/P4P1K/8/8 b - - 99 50";
+        let mut game = Game::from_fen(&fen.to_string());
+
+        assert!(game.to_fen() == fen);
+        assert!(game.do_move(&Square::from("f7"), &Square::from("F6")) == true);
+        assert!(game.result == ChessResult::Draw);
+        assert!(game.to_fen() == "8/8/3p1k2/1p1Pp2p/pP2Pp1P/P4P1K/8/8 w - - 100 51")
     }
 
     #[test]
