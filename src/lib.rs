@@ -13,6 +13,7 @@
 use std::{collections::HashMap, ops::Not};
 
 // DATA
+#[derive(Clone)]
 pub struct Game {
     live_pieces: HashMap<Square, Piece>,
     fifty_move_rule: u32, // half-moves, reset upon pawn move or capture
@@ -417,6 +418,11 @@ impl Game {
 
     // returns a vec of Square, of all legal moves that can be made from the square "from" considering turn
     pub fn get_moves_list(&self, from : &Square) -> Vec<Square> {
+        // return empty if game is over
+        if self.result != ChessResult::Ongoing {
+            return Vec::new();
+        }
+
         match self.live_pieces.get(from) {
             Some(piece) => {
                 let mut moves = Vec::new();
@@ -438,6 +444,11 @@ impl Game {
 
     // returns a bitmap of all legal moves that can be made from the square "from" considering turn
     pub fn get_moves_bitmap(&self, from: &Square) -> u64 {
+        // return 0 if game is over
+        if self.result != ChessResult::Ongoing {
+            return 0;
+        }
+
         match self.live_pieces.get(from) {
             Some(piece) => {
                 if piece.color == self.turn {
@@ -452,6 +463,10 @@ impl Game {
 
     // does a move and returns true if it was successful
     pub fn do_move(&mut self, from: &Square, to: &Square) -> bool {
+        // return false if game is over
+        if self.result != ChessResult::Ongoing {
+            return false;
+        }
 
         // get piece at "from"
         let mut piece = match self.live_pieces.get(from) {
@@ -564,36 +579,30 @@ impl Game {
             // castle
             let (castle_bitmap_add, castle_bitmap_remove) = if piece.piece_type == PieceType::King && !piece.has_moved {
                 if piece.pos.moved(-2, 0) == to { // long castle
-                    match self.live_pieces.get(&Square::from((0,piece.pos.y))) {
-                        Some(rook) => {
-                            let mut rook = rook.clone();
-                            self.live_pieces.remove(&rook.pos);
-                            rook.has_moved = true;
-                            let castle_bitmap_remove = rook.pos.to_bitmap();
-                            rook.pos = to.moved(1, 0);
-                            let castle_bitmap_add = rook.pos.to_bitmap();
-                            self.live_pieces.insert(rook.pos, rook);
+                    let rook_pos = Square::from((0, piece.pos.y));
+                    let rook_to = to.moved(1, 0);
 
-                            // update bitmap
-                            (castle_bitmap_add, castle_bitmap_remove)
-                        },
-                        None => (0, 0),
+                    if move_piece_hashmap(&mut self.live_pieces, &rook_pos, rook_to) {
+                        // update bitmap
+                        let castle_bitmap_remove = rook_pos.to_bitmap();
+                        let castle_bitmap_add = rook_to.to_bitmap();
+
+                        (castle_bitmap_add, castle_bitmap_remove)
+                    } else {
+                        (0, 0)
                     }
                 } else if piece.pos.moved(2, 0) == to { // short castle
-                    match self.live_pieces.get(&Square::from((7, piece.pos.y))) {
-                        Some(rook) => {
-                            let mut rook = rook.clone();
-                            self.live_pieces.remove(&rook.pos);
-                            rook.has_moved = true;
-                            let castle_bitmap_remove = rook.pos.to_bitmap();
-                            rook.pos = to.moved(-1, 0);
-                            let castle_bitmap_add = rook.pos.to_bitmap();
-                            self.live_pieces.insert(rook.pos, rook);
+                    let rook_pos = Square::from((7, piece.pos.y));
+                    let rook_to = to.moved(-1, 0);
 
-                            // update bitmap
-                            (castle_bitmap_add, castle_bitmap_remove)
-                        },
-                        None => (0, 0),
+                    if move_piece_hashmap(&mut self.live_pieces, &rook_pos, rook_to) {
+                        // update bitmap
+                        let castle_bitmap_remove = rook_pos.to_bitmap();
+                        let castle_bitmap_add = rook_to.to_bitmap();
+
+                        (castle_bitmap_add, castle_bitmap_remove)
+                    } else {
+                        (0, 0)
                     }
                 } else {
                     (0, 0)
@@ -614,23 +623,14 @@ impl Game {
                 }
             }
 
-            // we remove the piece to change its key
-            self.live_pieces.remove(&piece.pos);
-
             // we set the last_moved data
             self.last_moved_from = piece.pos;
             self.last_moved_to = to;
 
-            // we change some data of piece
-            piece.pos = to;
-            piece.has_moved = true;
-
-
-            // we insert the piece so that the key was changed
-            // cloning piece should be fine as it only contains primitive types
-            self.live_pieces.insert(to, piece.clone());
+            // move the piece in the hashmap and set has_moved and pos
+            move_piece_hashmap(&mut self.live_pieces, &piece.pos, to);
             
-            // check for check, game over, 50 move rule, and changes turn
+            // check for check, game over, 50 move rule, draw by repetition or insufficient material, and changes turn
             if !self.promotion {
                 self.post_move();
             }
@@ -949,6 +949,25 @@ impl Game {
     
 }
 
+// changes the hashmap key, sets the pieces new pos and the has_moved flag, returns false if failed or key not in hashmap or new key already in hashmap
+fn move_piece_hashmap(hash_map: &mut HashMap<Square, Piece>, from: &Square, to: Square) -> bool {
+    let mut piece = match hash_map.remove(from) {
+        Some(val) => val,
+        None => return false,
+    };
+
+    if hash_map.contains_key(&to) {
+        return false;
+    }
+
+    piece.has_moved = true;
+    piece.pos = to;
+
+    hash_map.insert(to, piece);
+
+    true
+}
+
 #[derive(Clone)]
 pub struct Piece {
     pub piece_type: PieceType,
@@ -1222,6 +1241,7 @@ impl From<&Game> for BoardValue {
 // more tests
 // timer
 // option in Game to turn off automatic draw due to 3 repetition or 50 move rule as well as 5 repetition and 75 move rule
+// fix perft
 // make it possible to call out draw if it is not automatic
 // and more!
 
@@ -1328,6 +1348,73 @@ mod tests {
         assert!(col1 != col3);
         assert!(col4 != col2);
         assert!(!(col1 != col2));
+    }
+
+    #[test]
+    fn test_perft() {
+        let position = 2;
+        let depth = 3;
+
+        let game = match position {
+            1 => Game::new(),
+            2 => Game::from_fen(&String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")),
+            3 => Game::from_fen(&String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1")),
+            4 => Game::from_fen(&String::from("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")),
+            _ => return,
+        };
+
+        let nodes_by_position = 
+        [
+            [1, 20, 300, 8902, 197281, 4865609, 119060324],
+            [1, 48, 2039, 97862, 4085603, 193690690, 8031647685],
+            [1, 14, 191, 2812, 43238, 674624, 11030083],
+            [1, 6, 264, 9467, 422333, 15833292, 706045033],
+        ];
+
+        assert_eq!(perft(game, depth), nodes_by_position[position - 1][depth as usize])
+    }
+
+    fn perft(game: Game, depth: i8) -> u64{
+        let mut nodes = 0;
+
+        if depth == 0 {
+            return 1;
+        }
+
+        for i in 0..64 {
+            let from = Square::from(i);
+            let moves = game.get_moves_list(&from);
+            for to in moves {
+                let mut game2 = game.clone();
+                game2.do_move(&from, &to);
+                if game2.promotion {
+                    // Queen
+                    let mut game2q = game2.clone();
+                    game2q.pawn_promotion(PieceType::Queen);
+                    nodes += perft(game2q, depth - 1);
+                    
+                    // Rook
+                    let mut game2r = game2.clone();
+                    game2r.pawn_promotion(PieceType::Rook);
+                    nodes += perft(game2r, depth - 1);
+                    
+                    // Bishop
+                    let mut game2b = game2.clone();
+                    game2b.pawn_promotion(PieceType::Bishop);
+                    nodes += perft(game2b, depth - 1);
+                    
+                    // Knight
+                    let mut game2k = game2.clone();
+                    game2k.pawn_promotion(PieceType::Knight);
+                    nodes += perft(game2k, depth - 1);
+                }
+                else {
+                    nodes += perft(game2, depth - 1);
+                }
+            }
+        }
+        
+        nodes
     }
 
     // Regression tests: se till att inte buggar återuppstår
