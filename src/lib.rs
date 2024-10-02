@@ -461,6 +461,15 @@ impl Game {
         }
     }
 
+    // returns the ChessResult of a move but does not complete it. Uses clone so it is inefficient.
+    pub fn try_move(&self, from: &Square, to: &Square) -> ChessResult {
+        let mut test_game = self.clone();
+
+        test_game.do_move(from, to);
+
+        test_game.result
+    }
+
     // does a move and returns true if it was successful
     pub fn do_move(&mut self, from: &Square, to: &Square) -> bool {
         // return false if game is over
