@@ -1004,13 +1004,6 @@ impl From<(i8, i8)> for Square {
     }
 }
 
-impl From<(u8, u8)> for Square {
-    // initialize from a tuple of (u8, u8)
-    fn from(pos: (u8, u8)) -> Self {
-        Self {x: pos.0 as i8, y: pos.1 as i8}
-    }
-}
-
 impl From<&str> for Square {
     // initialize from letter-number notation
     fn from(pos: &str) -> Self {
@@ -1053,6 +1046,10 @@ impl From<&str> for Square {
 }
 
 impl Square {
+    pub fn from_u8(pos: (u8, u8)) -> Self {
+        Self { x: pos.0 as i8, y: pos.1 as i8 }
+    }
+
     // returns the square number as if they were indexed from 0,0 to 7,0 to 1,0 and so on until 7,7
     pub fn to_index(&self) -> i8 {
         self.x + self.y * 8
