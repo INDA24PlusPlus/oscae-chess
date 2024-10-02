@@ -1007,7 +1007,7 @@ impl From<(i8, i8)> for Square {
 impl From<(u8, u8)> for Square {
     // initialize from a tuple of (u8, u8)
     fn from(pos: (u8, u8)) -> Self {
-        Self {x: pos.0, y: pos.1}
+        Self {x: pos.0 as i8, y: pos.1 as i8}
     }
 }
 
