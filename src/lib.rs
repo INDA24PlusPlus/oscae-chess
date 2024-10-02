@@ -461,13 +461,13 @@ impl Game {
         }
     }
 
-    // returns the ChessResult of a move but does not complete it. Uses clone so it is inefficient.
-    pub fn try_move(&self, from: &Square, to: &Square) -> ChessResult {
+    // returns the ChessResult and if promotion is required of a move but does not complete it. Uses clone so it is inefficient.
+    pub fn try_move(&self, from: &Square, to: &Square) -> (ChessResult, bool, bool) {
         let mut test_game = self.clone();
 
-        test_game.do_move(from, to);
+        let legal = test_game.do_move(from, to);
 
-        test_game.result
+        (test_game.result, test_game.promotion, legal)
     }
 
     // does a move and returns true if it was successful
